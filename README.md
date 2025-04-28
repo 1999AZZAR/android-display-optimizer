@@ -1,6 +1,6 @@
 # Android Display & Performance Optimizer
 
-A powerful Bash script utility designed to optimize Android device display and performance settings via ADB (Android Debug Bridge). This tool allows you to easily adjust animation speeds, change DPI settings, and manage hardware acceleration options on your Android device.
+A lightweight, menu-driven Bash script to finely tune your Android device's display and performance settings via ADB (Android Debug Bridge). Quickly adjust animation scales, DPI, and hardware acceleration with simple, color-coded menus.
 
 ## Features
 
@@ -37,10 +37,10 @@ A powerful Bash script utility designed to optimize Android device display and p
 
 ## Prerequisites
 
-- Bash shell environment (Linux, macOS, or Windows with WSL/Git Bash)
-- ADB (Android Debug Bridge) installed and available in your PATH
-- USB debugging enabled on your Android device
-- USB connection between your computer and Android device
+1. Bash shell (Linux, macOS, or Windows with WSL/Git Bash).
+2. ADB installed and accessible in your PATH.
+3. USB debugging enabled on your Android device.
+4. USB connection between your computer and device.
 
 ## Installation
 
@@ -61,37 +61,36 @@ A powerful Bash script utility designed to optimize Android device display and p
 
 ## Usage
 
-1. Connect your Android device to your computer via USB
-2. Ensure USB debugging is enabled on your device
-3. Run the script:
+1. Connect your Android device via USB and enable USB debugging.
+2. Run the script:
    ```bash
-   ./v6.sh
+   chmod +x v6.sh && ./v6.sh
    ```
+3. Use number or letter keys to select menu options.
+4. Press Enter to confirm selections when prompted.
 
-4. Follow the on-screen menu to select options
+## Menu Overview
 
-## Menu Options
+Select from the following options:
 
-The script provides a user-friendly menu with the following options:
-
-### Information:
+### Information
 - **1**: Show animation settings
 - **2**: Show current DPI information
 - **3**: Show device information
 - **4**: Show hardware acceleration status
 
-### Animation Settings:
+### Animation Controls
 - **5**: Set animation scales to 1.0x (default)
 - **6**: Set animation scales to 0.90x
 - **7**: Set animation scales to 0.75x
 - **8**: Set animation scales to custom value
 - **9**: Turn off animations (0.0x)
 
-### DPI Settings:
+### DPI Settings
 - **10**: Set custom DPI
 - **11**: Reset DPI to default
 
-### Hardware Acceleration:
+### Hardware Acceleration
 - **12**: Enable all hardware acceleration features
 - **13**: Enable GPU acceleration only
 - **14**: Enable UI hardware acceleration only
@@ -100,7 +99,7 @@ The script provides a user-friendly menu with the following options:
 - **17**: Disable UI hardware acceleration only
 - **18**: Reset hardware acceleration to device defaults
 
-### Other:
+### Other
 - **c**: Change device
 - **r**: Reboot device
 - **0**: Exit
@@ -120,18 +119,15 @@ If you encounter issues:
    ```bash
    adb version
    ```
-
-2. Verify USB debugging is enabled on your device
-   - Settings > About Phone > Tap "Build Number" 7 times
-   - Settings > Developer Options > Enable USB Debugging
-
-3. Check device connection status
+2. Verify device connection:
    ```bash
    adb devices
    ```
-
-4. Make sure your user has proper permissions to run ADB commands
+3. Reconnect USB cable or restart ADB server if necessary:
+   ```bash
+   adb kill-server && adb start-server
+   ```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Fork the repo, create a feature branch, and submit a Pull Request.

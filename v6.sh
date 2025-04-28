@@ -1,4 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v adb >/dev/null 2>&1; then
+    echo -e "${RED}ADB is required but not installed. Please install ADB and ensure it's in your PATH.${RESET}"
+    exit 1
+fi
 
 # Text formatting
 BOLD="\033[1m"
@@ -95,6 +100,111 @@ get_hw_acceleration_status() {
     echo -e "GPU Usage: ${GREEN}${HW_GPU_USE:-"Not set"}${RESET}"
     echo -e "GPU Profiler: ${GREEN}${HW_GPU_PROFILER:-"Not set"}${RESET}"
     echo -e "OpenGL Traces: ${GREEN}${HW_OPENGL_TRACES:-"Not set"}${RESET}"
+    echo
+}
+
+# Function to get rotation settings
+get_rotation_settings() {
+    # Get current rotation settings
+    ACCELEROMETER_ROTATION=$(run_adb shell settings get system accelerometer_rotation | tr -d '\r')
+    USER_ROTATION=$(run_adb shell settings get system user_rotation | tr -d '\r')
+    ACCELEROMETER_ROTATION_STATUS="Disabled"
+    USER_ROTATION_VALUE="Unknown"
+
+    if [ "$ACCELEROMETER_ROTATION" == "1" ]; then
+        ACCELEROMETER_ROTATION_STATUS="Enabled"
+    fi
+
+    case "$USER_ROTATION" in
+        "0") USER_ROTATION_VALUE="Portrait (0°)" ;;
+        "1") USER_ROTATION_VALUE="Landscape (90°)" ;;
+        "2") USER_ROTATION_VALUE="Upside down (180°)" ;;
+        "3") USER_ROTATION_VALUE="Landscape reversed (270°)" ;;
+        *) USER_ROTATION_VALUE="Unknown ($USER_ROTATION)" ;;
+    esac
+
+    # Check if upside-down rotation is allowed
+    ALLOWED_ROTATIONS=$(run_adb shell cmd window get-allowed-display-rotations | tr -d '\r')
+    UPSIDE_DOWN_ALLOWED="No"
+
+    if [[ $ALLOWED_ROTATIONS == *"180"* ]]; then
+        UPSIDE_DOWN_ALLOWED="Yes"
+    fi
+
+    echo -e "${BOLD}Current Rotation Settings:${RESET}"
+    echo -e "Auto-Rotation: ${GREEN}$ACCELEROMETER_ROTATION_STATUS${RESET}"
+    echo -e "Current Fixed Rotation: ${GREEN}$USER_ROTATION_VALUE${RESET}"
+    echo -e "Upside-Down Rotation Allowed: ${GREEN}$UPSIDE_DOWN_ALLOWED${RESET}"
+    echo
+}
+
+# Function to enable all rotations including upside-down
+enable_all_rotations() {
+    echo -e "${BLUE}Enabling all screen rotations (including upside-down)...${RESET}"
+
+    # Enable all rotations
+    run_adb shell content insert --uri content://settings/system --bind name:s:user_rotation_angles_global --bind value:s:0,1,2,3
+
+    # Need to use the window manager command to enable upside-down rotation
+    run_adb shell cmd window set-allowed-display-rotations 0,1,2,3
+
+    echo -e "${GREEN}✓ All screen rotations enabled${RESET}"
+    echo -e "${BOLD}Note: You may need to toggle auto-rotation for changes to take effect${RESET}"
+    echo
+}
+
+# Function to disable upside-down rotation
+disable_upside_down_rotation() {
+    echo -e "${BLUE}Disabling upside-down rotation...${RESET}"
+
+    # Disable upside-down rotation
+    run_adb shell content insert --uri content://settings/system --bind name:s:user_rotation_angles_global --bind value:s:0,1,3
+
+    # Need to use the window manager command to disable upside-down rotation
+    run_adb shell cmd window set-allowed-display-rotations 0,1,3
+
+    echo -e "${GREEN}✓ Upside-down rotation disabled${RESET}"
+    echo -e "${BOLD}Note: You may need to toggle auto-rotation for changes to take effect${RESET}"
+    echo
+}
+
+# Function to set rotation to a specific orientation
+set_specific_rotation() {
+    ROTATION=$1
+    ROTATION_NAME=""
+
+    case "$ROTATION" in
+        "0") ROTATION_NAME="Portrait (0°)" ;;
+        "1") ROTATION_NAME="Landscape (90°)" ;;
+        "2") ROTATION_NAME="Upside down (180°)" ;;
+        "3") ROTATION_NAME="Landscape reversed (270°)" ;;
+    esac
+
+    echo -e "${BLUE}Setting rotation to ${ROTATION_NAME}...${RESET}"
+
+    # Disable auto-rotation
+    run_adb shell settings put system accelerometer_rotation 0
+
+    # Set specific rotation
+    run_adb shell settings put system user_rotation $ROTATION
+
+    echo -e "${GREEN}✓ Rotation set to ${ROTATION_NAME}${RESET}"
+    echo
+}
+
+# Function to toggle auto-rotation
+toggle_auto_rotation() {
+    CURRENT_AUTO_ROTATION=$(run_adb shell settings get system accelerometer_rotation | tr -d '\r')
+
+    if [ "$CURRENT_AUTO_ROTATION" == "1" ]; then
+        # Disable auto-rotation
+        run_adb shell settings put system accelerometer_rotation 0
+        echo -e "${GREEN}✓ Auto-rotation disabled${RESET}"
+    else
+        # Enable auto-rotation
+        run_adb shell settings put system accelerometer_rotation 1
+        echo -e "${GREEN}✓ Auto-rotation enabled${RESET}"
+    fi
     echo
 }
 
@@ -286,26 +396,36 @@ show_menu() {
     echo -e "  2. Show current DPI information"
     echo -e "  3. Show device information"
     echo -e "  4. Show hardware acceleration status"
+    echo -e "  5. Show rotation settings"
     echo
     echo -e "${BOLD}ANIMATION SETTINGS:${RESET}"
-    echo -e "  5. Set animation scales to 1.0x (default)"
-    echo -e "  6. Set animation scales to 0.90x"
-    echo -e "  7. Set animation scales to 0.75x"
-    echo -e "  8. Set animation scales to custom value"
-    echo -e "  9. Turn off animations (0.0x)"
+    echo -e "  6. Set animation scales to 1.0x (default)"
+    echo -e "  7. Set animation scales to 0.90x"
+    echo -e "  8. Set animation scales to 0.75x"
+    echo -e "  9. Set animation scales to custom value"
+    echo -e " 10. Turn off animations (0.0x)"
     echo
     echo -e "${BOLD}DPI SETTINGS:${RESET}"
-    echo -e " 10. Set custom DPI"
-    echo -e " 11. Reset DPI to default"
+    echo -e " 11. Set custom DPI"
+    echo -e " 12. Reset DPI to default"
+    echo
+    echo -e "${BOLD}ROTATION SETTINGS:${RESET}"
+    echo -e " 13. Enable all rotations (including upside-down)"
+    echo -e " 14. Disable upside-down rotation"
+    echo -e " 15. Toggle auto-rotation"
+    echo -e " 16. Set rotation to portrait (0°)"
+    echo -e " 17. Set rotation to landscape (90°)"
+    echo -e " 18. Set rotation to upside-down (180°)"
+    echo -e " 19. Set rotation to landscape reversed (270°)"
     echo
     echo -e "${BOLD}HARDWARE ACCELERATION:${RESET}"
-    echo -e " 12. Enable all hardware acceleration features"
-    echo -e " 13. Enable GPU acceleration only"
-    echo -e " 14. Enable UI hardware acceleration only"
-    echo -e " 15. Disable all hardware acceleration features"
-    echo -e " 16. Disable GPU acceleration only"
-    echo -e " 17. Disable UI hardware acceleration only"
-    echo -e " 18. Reset hardware acceleration to device defaults"
+    echo -e " 20. Enable all hardware acceleration features"
+    echo -e " 21. Enable GPU acceleration only"
+    echo -e " 22. Enable UI hardware acceleration only"
+    echo -e " 23. Disable all hardware acceleration features"
+    echo -e " 24. Disable GPU acceleration only"
+    echo -e " 25. Disable UI hardware acceleration only"
+    echo -e " 26. Reset hardware acceleration to device defaults"
     echo
     echo -e "${BOLD}OTHER:${RESET}"
     echo -e "  0. Exit"
@@ -356,64 +476,96 @@ while true; do
         wait_for_enter
         ;;
     5)
-        set_animation_scale 1.0
+        get_rotation_settings
         wait_for_enter
         ;;
     6)
-        set_animation_scale 0.90
+        set_animation_scale 1.0
         wait_for_enter
         ;;
     7)
-        set_animation_scale 0.75
+        set_animation_scale 0.90
         wait_for_enter
         ;;
     8)
+        set_animation_scale 0.75
+        wait_for_enter
+        ;;
+    9)
         echo -n -e "${BOLD}Enter custom scale (e.g., 0.5): ${RESET}"
         read custom_scale
         set_animation_scale $custom_scale
         wait_for_enter
         ;;
-    9)
+    10)
         set_animation_scale 0.0
         echo -e "${GREEN}✓ Animations turned off (0.0x)${RESET}"
         wait_for_enter
         ;;
-    10)
+    11)
         get_dpi_info
         echo -n -e "${BOLD}Enter new DPI value: ${RESET}"
         read new_dpi
         set_custom_dpi $new_dpi
         wait_for_enter
         ;;
-    11)
+    12)
         reset_dpi
         wait_for_enter
         ;;
-    12)
-        enable_all_hw_acceleration
-        wait_for_enter
-        ;;
     13)
-        enable_gpu_acceleration
+        enable_all_rotations
         wait_for_enter
         ;;
     14)
-        enable_ui_hw_acceleration
+        disable_upside_down_rotation
         wait_for_enter
         ;;
     15)
-        disable_all_hw_acceleration
+        toggle_auto_rotation
         wait_for_enter
         ;;
     16)
-        disable_gpu_acceleration
+        set_specific_rotation 0
         wait_for_enter
         ;;
     17)
-        disable_ui_hw_acceleration
+        set_specific_rotation 1
         wait_for_enter
         ;;
     18)
+        set_specific_rotation 2
+        wait_for_enter
+        ;;
+    19)
+        set_specific_rotation 3
+        wait_for_enter
+        ;;
+    20)
+        enable_all_hw_acceleration
+        wait_for_enter
+        ;;
+    21)
+        enable_gpu_acceleration
+        wait_for_enter
+        ;;
+    22)
+        enable_ui_hw_acceleration
+        wait_for_enter
+        ;;
+    23)
+        disable_all_hw_acceleration
+        wait_for_enter
+        ;;
+    24)
+        disable_gpu_acceleration
+        wait_for_enter
+        ;;
+    25)
+        disable_ui_hw_acceleration
+        wait_for_enter
+        ;;
+    26)
         reset_hw_acceleration
         wait_for_enter
         ;;
