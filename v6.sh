@@ -60,30 +60,68 @@ create_config_if_missing() {
     CONFIG_FILE="config.ini"
     if [ ! -f "$CONFIG_FILE" ]; then
         echo -e "${YELLOW}Configuration file not found. Creating a default config.ini...${RESET}"
-        {
-            echo "[AnimationScales]"
-            echo "Default = 1.0"
-            echo "Option1 = 0.9"
-            echo "Option2 = 0.75"
-            echo
-            echo "[DPI]"
-            echo "Default = 480"
-            echo "Custom = 420"
-            echo
-            echo "[Colors]"
-            echo "BOLD='\033[1m'"
-            echo "GREEN='\033[0;32m'"
-            echo "BLUE='\033[0;34m'"
-            echo "YELLOW='\033[0;33m'"
-            echo "RED='\033[0;31m'"
-            echo "RESET='\033[0m'"
-            echo
-            echo "[Backup]"
-            echo "Prefix = android_settings_"
-        } > "$CONFIG_FILE"
-        echo -e "${GREEN}✓ Default config.ini created. You can edit this file to change menu presets.${RESET}"
+        save_settings_to_config # Generate config from current device state
+        echo -e "${GREEN}✓ Default config.ini created from current device settings.${RESET}"
+        echo -e "${YELLOW}You can now edit this file to create a custom default profile.${RESET}"
         echo
     fi
+}
+
+save_settings_to_config() {
+    CONFIG_FILE="config.ini"
+    echo -e "${BLUE}Saving current device settings to ${CONFIG_FILE}...${RESET}"
+    {
+        echo "# Android Optimizer Configuration Profile"
+        echo "# Edit these values to define the script's default behavior."
+        echo
+        echo "[Animation]"
+        echo "window_animation_scale=$(run_adb shell settings get global window_animation_scale)"
+        echo "transition_animation_scale=$(run_adb shell settings get global transition_animation_scale)"
+        echo "animator_duration_scale=$(run_adb shell settings get global animator_duration_scale)"
+        echo
+        echo "[Display]"
+        echo "density=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)"
+        echo
+        echo "[HardwareAcceleration]"
+        echo "force_gpu_rendering=$(run_adb shell settings get global force_gpu_rendering)"
+        echo "profile_gpu_rendering=$(run_adb shell getprop debug.hwui.profile)"
+        echo "debug_gpu_overdraw=$(run_adb shell getprop debug.hwui.overdraw)"
+        echo
+        echo "[Rotation]"
+        echo "accelerometer_rotation=$(run_adb shell settings get system accelerometer_rotation)"
+        echo "user_rotation=$(run_adb shell settings get system user_rotation)"
+        echo
+        echo "[Backup]"
+        echo "Prefix=android_settings_"
+        echo
+        echo "[Colors]"
+        echo "BOLD='\033[1m'"
+        echo "GREEN='\033[0;32m'"
+        echo "BLUE='\033[0;34m'"
+        echo "YELLOW='\033[0;33m'"
+        echo "RED='\033[0;31m'"
+        echo "RESET='\033[0m'"
+    } > "$CONFIG_FILE"
+    echo -e "${GREEN}✓ Settings saved to ${CONFIG_FILE}${RESET}"
+}
+
+load_config_to_device() {
+    echo -e "${YELLOW}Applying all settings from config.ini to device...${RESET}"
+    source <(grep = config.ini | sed 's/ *= */=/g')
+
+    # Apply settings
+    run_adb shell settings put global window_animation_scale $window_animation_scale
+    run_adb shell settings put global transition_animation_scale $transition_animation_scale
+    run_adb shell settings put global animator_duration_scale $animator_duration_scale
+    run_adb shell wm density $density
+    run_adb shell settings put global force_gpu_rendering $force_gpu_rendering
+    run_adb shell setprop debug.hwui.profile $profile_gpu_rendering
+    run_adb shell setprop debug.hwui.overdraw $debug_gpu_overdraw
+    run_adb shell settings put system accelerometer_rotation $accelerometer_rotation
+    run_adb shell settings put system user_rotation $user_rotation
+
+    echo -e "${GREEN}✓ All settings from config.ini have been applied.${RESET}"
+    echo -e "${BOLD}A reboot may be required for some changes to take full effect.${RESET}"
 }
 
 get_animation_settings() {
@@ -271,32 +309,13 @@ reboot_device() {
 }
 
 backup_settings() {
+    source <(grep = config.ini | sed 's/ *= */=/g')
     BACKUP_FILE="${Prefix}$(date +%Y%m%d_%H%M%S).bak"
-    echo -e "${BLUE}Backing up current settings to ${BACKUP_FILE}...${RESET}"
-
-    {
-        echo "# Android Display & Performance Settings Backup"
-        echo "# Created on $(date)"
-        echo
-        echo "# Animation Scales"
-        echo "window_animation_scale=$(run_adb shell settings get global window_animation_scale)"
-        echo "transition_animation_scale=$(run_adb shell settings get global transition_animation_scale)"
-        echo "animator_duration_scale=$(run_adb shell settings get global animator_duration_scale)"
-        echo
-        echo "# DPI"
-        echo "density=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)"
-        echo
-        echo "# Hardware Acceleration"
-        echo "hwui_render_dirty_regions=$(run_adb shell getprop debug.hwui.render_dirty_regions)"
-        echo "persist_sys_ui_hw=$(run_adb shell getprop persist.sys.ui.hw)"
-        echo "force_gpu_rendering=$(run_adb shell settings get global force_gpu_rendering)"
-        echo
-        echo "# Rotation"
-        echo "accelerometer_rotation=$(run_adb shell settings get system accelerometer_rotation)"
-        echo "user_rotation=$(run_adb shell settings get system user_rotation)"
-    } > "$BACKUP_FILE"
-
-    echo -e "${GREEN}✓ Backup complete: ${BACKUP_FILE}${RESET}"
+    echo -e "${BLUE}Performing a full backup of all known settings to ${BACKUP_FILE}...${RESET}"
+    save_settings_to_config # Use the same logic to ensure all settings are captured
+    mv config.ini "$BACKUP_FILE"
+    echo -e "${GREEN}✓ Full backup complete: ${BACKUP_FILE}${RESET}"
+    create_config_if_missing # Recreate a default config to continue working
 }
 
 restore_settings() {
@@ -309,32 +328,10 @@ restore_settings() {
         fi
     done
 
-    echo -e "${YELLOW}Restoring settings from ${BACKUP_FILE}...${RESET}"
-
-    while IFS='=' read -r key value; do
-        if [[ ! "$key" =~ ^# && "$value" ]]; then
-            case "$key" in
-                window_animation_scale|transition_animation_scale|animator_duration_scale)
-                    run_adb shell settings put global $key $value
-                    ;;
-                density)
-                    run_adb shell wm density $value
-                    ;;
-                hwui_render_dirty_regions|persist_sys_ui_hw)
-                    run_adb shell setprop $key $value
-                    ;;
-                force_gpu_rendering)
-                    run_adb shell settings put global $key $value
-                    ;;
-                accelerometer_rotation|user_rotation)
-                    run_adb shell settings put system $key $value
-                    ;;
-            esac
-        fi
-    done < "$BACKUP_FILE"
-
-    echo -e "${GREEN}✓ Settings restored from ${BACKUP_FILE}${RESET}"
-    echo -e "${BOLD}A reboot is recommended for all changes to take effect.${RESET}"
+    echo -e "${YELLOW}Restoring all settings from ${BACKUP_FILE}...${RESET}"
+    cp "$BACKUP_FILE" config.ini
+    load_config_to_device
+    echo -e "${GREEN}✓ All settings restored from ${BACKUP_FILE}${RESET}"
 }
 
 handle_info() {
