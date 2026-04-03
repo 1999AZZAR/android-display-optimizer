@@ -19,12 +19,40 @@ RESET='\033[0m'
 # --- Function Definitions ---
 
 run_adb() {
-    adb -s $SELECTED_DEVICE $@
+    adb -s "$SELECTED_DEVICE" "$@"
+}
+
+run_menu_action() {
+    local status
+    set +e
+    "$@"
+    status=$?
+    set -e
+
+    if [ $status -ne 0 ]; then
+        echo
+        echo -e "${RED}Action failed with exit code ${status}.${RESET}"
+        echo -e "${YELLOW}Some properties require root, are read-only on your device, or are unsupported on this Android build.${RESET}"
+    fi
+
+    return $status
+}
+
+load_config_vars() {
+    local config_file="${1:-config.ini}"
+
+    if [ ! -f "$config_file" ]; then
+        echo -e "${RED}Configuration file '$config_file' not found.${RESET}" >&2
+        return 1
+    fi
+
+    # Only load simple KEY=VALUE assignments and ignore section headers/comments.
+    source <(sed -n '/^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/p' "$config_file" | sed 's/^[[:space:]]*//; s/[[:space:]]*=[[:space:]]*/=/')
 }
 
 check_and_select_device() {
     echo -e "${BLUE}Checking for connected devices...${RESET}"
-    DEVICE_LIST=($(adb devices | grep -v "List" | grep -v "^$" | awk '{print $1}'))
+    mapfile -t DEVICE_LIST < <(adb devices | awk '$2 == "device" {print $1}')
     DEVICE_COUNT=${#DEVICE_LIST[@]}
 
     if [ $DEVICE_COUNT -eq 0 ]; then
@@ -37,13 +65,13 @@ check_and_select_device() {
         echo -e "${YELLOW}Multiple devices found:${RESET}"
         for i in "${!DEVICE_LIST[@]}"; do
             DEVICE=${DEVICE_LIST[$i]}
-            MODEL=$(adb -s $DEVICE shell getprop ro.product.model 2>/dev/null | tr -d '\r')
+            MODEL=$(adb -s "$DEVICE" shell getprop ro.product.model 2>/dev/null | tr -d '\r')
             echo -e "  ${BOLD}$((i + 1))${RESET}. $DEVICE ${YELLOW}($MODEL)${RESET}"
         done
 
         while true; do
             echo -ne "${BOLD}Select device (1-$DEVICE_COUNT): ${RESET}"
-            read selection
+            read -r selection
             if [[ $selection =~ ^[0-9]+$ ]] && [ $selection -ge 1 ] && [ $selection -le $DEVICE_COUNT ]; then
                 SELECTED_DEVICE=${DEVICE_LIST[$((selection - 1))]}
                 echo -e "${GREEN}✓ Selected device: $SELECTED_DEVICE${RESET}"
@@ -107,18 +135,18 @@ save_settings_to_config() {
 
 load_config_to_device() {
     echo -e "${YELLOW}Applying all settings from config.ini to device...${RESET}"
-    source <(grep = config.ini | sed 's/ *= */=/g')
+    load_config_vars config.ini
 
     # Apply settings
-    run_adb shell settings put global window_animation_scale $window_animation_scale
-    run_adb shell settings put global transition_animation_scale $transition_animation_scale
-    run_adb shell settings put global animator_duration_scale $animator_duration_scale
-    run_adb shell wm density $density
-    run_adb shell settings put global force_gpu_rendering $force_gpu_rendering
-    run_adb shell setprop debug.hwui.profile $profile_gpu_rendering
-    run_adb shell setprop debug.hwui.overdraw $debug_gpu_overdraw
-    run_adb shell settings put system accelerometer_rotation $accelerometer_rotation
-    run_adb shell settings put system user_rotation $user_rotation
+    run_adb shell settings put global window_animation_scale "$window_animation_scale"
+    run_adb shell settings put global transition_animation_scale "$transition_animation_scale"
+    run_adb shell settings put global animator_duration_scale "$animator_duration_scale"
+    run_adb shell wm density "$density"
+    run_adb shell settings put global force_gpu_rendering "$force_gpu_rendering"
+    run_adb shell setprop debug.hwui.profile "$profile_gpu_rendering"
+    run_adb shell setprop debug.hwui.overdraw "$debug_gpu_overdraw"
+    run_adb shell settings put system accelerometer_rotation "$accelerometer_rotation"
+    run_adb shell settings put system user_rotation "$user_rotation"
 
     echo -e "${GREEN}✓ All settings from config.ini have been applied.${RESET}"
     echo -e "${BOLD}A reboot may be required for some changes to take full effect.${RESET}"
@@ -175,19 +203,19 @@ get_rotation_settings() {
 set_animation_scale() {
     SCALE=$1
     echo -e "${BLUE}Setting all animation scales to ${SCALE}x...${RESET}"
-    run_adb shell settings put global window_animation_scale $SCALE
-    run_adb shell settings put global transition_animation_scale $SCALE
-    run_adb shell settings put global animator_duration_scale $SCALE
+    run_adb shell settings put global window_animation_scale "$SCALE"
+    run_adb shell settings put global transition_animation_scale "$SCALE"
+    run_adb shell settings put global animator_duration_scale "$SCALE"
     echo -e "${GREEN}✓ Animation scales set to ${SCALE}x${RESET}"
 }
 
 set_custom_dpi() {
     get_dpi_info
     echo -n -e "${BOLD}Enter new DPI value: ${RESET}"
-    read new_dpi
+    read -r new_dpi
     if [[ "$new_dpi" =~ ^[0-9]+$ ]]; then
         echo -e "${BLUE}Setting device DPI to $new_dpi...${RESET}"
-        run_adb shell wm density $new_dpi
+        run_adb shell wm density "$new_dpi"
         echo -e "${GREEN}✓ DPI set to $new_dpi${RESET}"
         echo -e "${BOLD}Note: You may need to restart your device for changes to take full effect${RESET}"
     else
@@ -224,7 +252,7 @@ set_specific_rotation() {
     esac
     echo -e "${BLUE}Setting rotation to ${ROTATION_NAME}...${RESET}"
     run_adb shell settings put system accelerometer_rotation 0
-    run_adb shell settings put system user_rotation $ROTATION
+    run_adb shell settings put system user_rotation "$ROTATION"
     echo -e "${GREEN}✓ Rotation set to ${ROTATION_NAME}${RESET}"
 }
 
@@ -297,7 +325,7 @@ reboot_device() {
     echo -e "${BOLD}Device is now restarting...${RESET}"
     echo -e "${BLUE}Please wait for the device to reconnect before continuing${RESET}"
     echo -n -e "${YELLOW}Would you like to wait for the device to reconnect? (y/n) ${RESET}"
-    read wait_response
+    read -r wait_response
     if [[ "$wait_response" =~ ^[Yy]$ ]]; then
         echo -e "${BLUE}Waiting for device to reconnect...${RESET}"
         run_adb wait-for-device
@@ -309,7 +337,7 @@ reboot_device() {
 }
 
 backup_settings() {
-    source <(grep = config.ini | sed 's/ *= */=/g')
+    load_config_vars config.ini
     BACKUP_FILE="${Prefix}$(date +%Y%m%d_%H%M%S).bak"
     echo -e "${BLUE}Performing a full backup of all known settings to ${BACKUP_FILE}...${RESET}"
     save_settings_to_config # Use the same logic to ensure all settings are captured
@@ -318,10 +346,40 @@ backup_settings() {
     create_config_if_missing # Recreate a default config to continue working
 }
 
+change_device() {
+    check_and_select_device
+}
+
+get_selected_device_model() {
+    local model status
+
+    set +e
+    model=$(run_adb shell getprop ro.product.model 2>/dev/null | tr -d '\r')
+    status=$?
+    set -e
+
+    if [ $status -ne 0 ] || [ -z "$model" ]; then
+        echo "Unknown device"
+    else
+        echo "$model"
+    fi
+}
+
 restore_settings() {
+    local backup_files=()
+
+    shopt -s nullglob
+    backup_files=(*.bak)
+    shopt -u nullglob
+
+    if [ ${#backup_files[@]} -eq 0 ]; then
+        echo -e "${YELLOW}No backup files found in the current directory.${RESET}"
+        return 1
+    fi
+
     echo -e "${BLUE}Select a backup file to restore:${RESET}"
-    select BACKUP_FILE in *.bak; do
-        if [ -n "$BACKUP_FILE" ]; then
+    select BACKUP_FILE in "${backup_files[@]}"; do
+        if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
             break
         else
             echo -e "${RED}Invalid selection. Please try again.${RESET}"
@@ -351,9 +409,9 @@ handle_animation() {
         8) set_animation_scale 0.75;;
         9)
             echo -n -e "${BOLD}Enter custom scale (e.g., 0.5): ${RESET}"
-            read custom_scale
+            read -r custom_scale
             if [[ "$custom_scale" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-                set_animation_scale $custom_scale
+                set_animation_scale "$custom_scale"
             else
                 echo -e "${RED}Invalid scale. Please enter a number.${RESET}"
             fi
@@ -398,7 +456,7 @@ show_menu() {
     echo -e "${BOLD}║       Android Display & Performance Optimizer    ║${RESET}"
     echo -e "${BOLD}╚═════════════════════════════════════════════════╝${RESET}"
     echo
-    echo -e "${BOLD}SELECTED DEVICE:${RESET} ${GREEN}$SELECTED_DEVICE${RESET} ($(run_adb shell getprop ro.product.model | tr -d '\r'))"
+    echo -e "${BOLD}SELECTED DEVICE:${RESET} ${GREEN}$SELECTED_DEVICE${RESET} ($(get_selected_device_model))"
     echo -e "${YELLOW}c. Change device${RESET}     ${RED}r. Reboot device${RESET}     ${BLUE}b. Backup${RESET}    ${GREEN}s. Restore${RESET}    ${RED}0. Exit${RESET}"
     echo
     echo -e "${BOLD}--- INFORMATION ---${RESET}"
@@ -429,36 +487,36 @@ show_menu() {
 wait_for_enter() {
     echo
     echo -n -e "Press Enter to continue..."
-    read
+    read -r
 }
 
 # --- Main Execution ---
-create_config_if_missing
-source <(grep = config.ini | sed 's/ *= */=/g' | sed 's/\s\+/\n/g')
 check_and_select_device
+create_config_if_missing
+load_config_vars config.ini
 
 while true; do
 
 
     show_menu
-    read choice
+    read -r choice
 
     case $choice in
-        [1-5]) handle_info $choice; wait_for_enter;;
-        [6-9]|10) handle_animation $choice; wait_for_enter;;
-        11|12) handle_dpi $choice; wait_for_enter;;
-        [1-2][0-6]) # Matches 13-19 and 20-26
+        [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
+        [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
+        11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
-                handle_rotation $choice
-            elif [ $choice -ge 20 ] && [ $choice -le 26 ]; then
-                handle_hw_acceleration $choice
+                run_menu_action handle_rotation "$choice"
+            elif [ $choice -ge 20 ] && [ $choice -le 28 ]; then
+                run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter
             ;;
         c|C) change_device;;
-        r|R) reboot_device; wait_for_enter;;
-        b|B) backup_settings; wait_for_enter;;
-        s|S) restore_settings; wait_for_enter;;
+        r|R) run_menu_action reboot_device; wait_for_enter;;
+        b|B) run_menu_action backup_settings; wait_for_enter;;
+        s|S) run_menu_action restore_settings; wait_for_enter;;
         0) echo -e "${GREEN}Exiting...${RESET}"; exit 0;;
         *) echo -e "${RED}Invalid option. Please try again.${RESET}"; sleep 1;;
     esac
