@@ -10,6 +10,7 @@
 - Screen brightness (`screen_brightness`)
 - Font scale (`font_scale`)
 - Status bar clock seconds (`clock_seconds`)
+- Status bar icon visibility via `icon_blacklist`
 - Stay-awake while charging (`stay_on_while_plugged_in`)
 - Rotation and auto-rotation
 - A small set of hardware acceleration and GPU debug properties
@@ -72,6 +73,9 @@ Font scale:
 Status bar:
 - Show the clock seconds in the status bar
 - Hide the clock seconds in the status bar
+- Show or hide the Wi-Fi icon
+- Show or hide the mobile icon
+- Show or hide the tethering icon
 
 Power:
 - Disable stay-awake while charging
@@ -107,6 +111,7 @@ Current sections:
 
 - `[Animation]`
 - `[Display]`
+- `[StatusBar]`
 - `[Power]`
 - `[HardwareAcceleration]`
 - `[Rotation]`
@@ -127,7 +132,10 @@ screen_off_timeout=15000
 screen_brightness=128
 screen_brightness_mode=0
 font_scale=1.0
+
+[StatusBar]
 clock_seconds=0
+icon_blacklist=
 
 [Power]
 stay_on_while_plugged_in=0

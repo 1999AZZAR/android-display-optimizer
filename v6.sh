@@ -49,6 +49,19 @@ run_menu_action() {
     return $status
 }
 
+get_secure_setting_value() {
+    local key value
+
+    key=$1
+    value=$(run_adb shell settings get secure "$key" 2>/dev/null | tr -d '\r' || true)
+
+    if [ "$value" = "null" ]; then
+        value=""
+    fi
+
+    printf '%s\n' "$value"
+}
+
 run_step() {
     local description status
 
@@ -156,8 +169,12 @@ normalize_config_vars() {
         font_scale="${value:-1.0}"
     fi
     if [ -z "${clock_seconds:-}" ]; then
-        value=$(run_adb shell settings get secure clock_seconds 2>/dev/null | tr -d '\r' || true)
+        value=$(get_secure_setting_value clock_seconds)
         clock_seconds="${value:-0}"
+    fi
+    if [ -z "${icon_blacklist:-}" ]; then
+        value=$(get_secure_setting_value icon_blacklist)
+        icon_blacklist="${value:-}"
     fi
     if [ -z "${force_gpu_rendering:-}" ]; then
         value=$(run_adb shell settings get global force_gpu_rendering 2>/dev/null | tr -d '\r' || true)
@@ -260,7 +277,10 @@ save_settings_to_config() {
         echo "screen_brightness=$(run_adb shell settings get system screen_brightness | tr -d '\r')"
         echo "screen_brightness_mode=$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')"
         echo "font_scale=$(run_adb shell settings get system font_scale | tr -d '\r')"
-        echo "clock_seconds=$(run_adb shell settings get secure clock_seconds | tr -d '\r')"
+        echo
+        echo "[StatusBar]"
+        echo "clock_seconds=$(get_secure_setting_value clock_seconds)"
+        echo "icon_blacklist=$(get_secure_setting_value icon_blacklist)"
         echo
         echo "[HardwareAcceleration]"
         echo "force_gpu_rendering=$(run_adb shell settings get global force_gpu_rendering)"
@@ -304,6 +324,11 @@ load_config_to_device() {
     run_adb shell settings put system screen_brightness "$screen_brightness"
     run_adb shell settings put system font_scale "$font_scale"
     run_adb shell settings put secure clock_seconds "$clock_seconds"
+    if [ -n "$icon_blacklist" ]; then
+        run_adb shell settings put secure icon_blacklist "$icon_blacklist"
+    else
+        run_adb shell settings delete secure icon_blacklist
+    fi
     run_adb shell settings put global force_gpu_rendering "$force_gpu_rendering"
     run_adb shell setprop debug.hwui.profile "$profile_gpu_rendering"
     run_adb shell setprop debug.hwui.overdraw "$debug_gpu_overdraw"
@@ -323,14 +348,15 @@ get_animation_settings() {
 }
 
 get_dpi_info() {
-    local current_dpi default_dpi current_brightness brightness_mode brightness_mode_label current_font_scale clock_seconds_value clock_seconds_label
+    local current_dpi default_dpi current_brightness brightness_mode brightness_mode_label current_font_scale clock_seconds_value clock_seconds_label blacklist_value wifi_icon_label mobile_icon_label tethering_icon_label
 
     current_dpi=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)
     default_dpi=$(run_adb shell getprop ro.sf.lcd_density)
     current_brightness=$(run_adb shell settings get system screen_brightness | tr -d '\r')
     brightness_mode=$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')
     current_font_scale=$(run_adb shell settings get system font_scale | tr -d '\r')
-    clock_seconds_value=$(run_adb shell settings get secure clock_seconds 2>/dev/null | tr -d '\r')
+    clock_seconds_value=$(get_secure_setting_value clock_seconds)
+    blacklist_value=$(get_secure_setting_value icon_blacklist)
 
     case "$brightness_mode" in
         0) brightness_mode_label="Manual";;
@@ -344,6 +370,21 @@ get_dpi_info() {
         *) clock_seconds_label="Unknown ($clock_seconds_value)";;
     esac
 
+    case ",$blacklist_value," in
+        *,wifi,*) wifi_icon_label="Hidden";;
+        *) wifi_icon_label="Shown";;
+    esac
+
+    case ",$blacklist_value," in
+        *,mobile,*) mobile_icon_label="Hidden";;
+        *) mobile_icon_label="Shown";;
+    esac
+
+    case ",$blacklist_value," in
+        *,hotspot,*) tethering_icon_label="Hidden";;
+        *) tethering_icon_label="Shown";;
+    esac
+
     echo -e "${BOLD}Display Information:${RESET}"
     echo -e "Current DPI: ${GREEN}$current_dpi${RESET}"
     echo -e "Default DPI: ${GREEN}$default_dpi${RESET}"
@@ -351,6 +392,9 @@ get_dpi_info() {
     echo -e "Brightness mode: ${GREEN}$brightness_mode_label${RESET}"
     echo -e "Font scale: ${GREEN}$current_font_scale${RESET}"
     echo -e "Clock seconds: ${GREEN}$clock_seconds_label${RESET}"
+    echo -e "Wi-Fi icon: ${GREEN}$wifi_icon_label${RESET}"
+    echo -e "Mobile icon: ${GREEN}$mobile_icon_label${RESET}"
+    echo -e "Tethering icon: ${GREEN}$tethering_icon_label${RESET}"
 }
 
 get_hw_acceleration_status() {
@@ -598,6 +642,49 @@ set_clock_seconds() {
     echo -e "${BLUE}Setting status bar clock seconds to ${clock_label}...${RESET}"
     run_adb shell settings put secure clock_seconds "$clock_value"
     echo -e "${GREEN}✓ Status bar clock seconds ${clock_label}${RESET}"
+}
+
+set_status_bar_icon_visibility() {
+    local icon_name icon_label show_value blacklist_value updated_blacklist item
+    local filtered_items=()
+
+    icon_name=$1
+    icon_label=$2
+    show_value=$3
+    blacklist_value=$(get_secure_setting_value icon_blacklist)
+
+    IFS=',' read -r -a current_items <<< "$blacklist_value"
+    for item in "${current_items[@]}"; do
+        [ -z "$item" ] && continue
+        [ "$item" = "$icon_name" ] && continue
+        filtered_items+=("$item")
+    done
+
+    if [ "$show_value" -eq 0 ]; then
+        filtered_items+=("$icon_name")
+    fi
+
+    updated_blacklist=""
+    for item in "${filtered_items[@]}"; do
+        if [ -n "$updated_blacklist" ]; then
+            updated_blacklist="${updated_blacklist},${item}"
+        else
+            updated_blacklist="$item"
+        fi
+    done
+
+    echo -e "${BLUE}Updating ${icon_label} icon visibility...${RESET}"
+    if [ -n "$updated_blacklist" ]; then
+        run_adb shell settings put secure icon_blacklist "$updated_blacklist"
+    else
+        run_adb shell settings delete secure icon_blacklist
+    fi
+
+    if [ "$show_value" -eq 1 ]; then
+        echo -e "${GREEN}✓ ${icon_label} icon shown${RESET}"
+    else
+        echo -e "${GREEN}✓ ${icon_label} icon hidden${RESET}"
+    fi
 }
 
 enable_all_rotations() {
@@ -885,13 +972,24 @@ handle_clock_seconds() {
     esac
 }
 
+handle_status_bar_icons() {
+    case $1 in
+        47) set_status_bar_icon_visibility wifi "Wi-Fi" 1;;
+        48) set_status_bar_icon_visibility wifi "Wi-Fi" 0;;
+        49) set_status_bar_icon_visibility mobile "Mobile" 1;;
+        50) set_status_bar_icon_visibility mobile "Mobile" 0;;
+        51) set_status_bar_icon_visibility hotspot "Tethering" 1;;
+        52) set_status_bar_icon_visibility hotspot "Tethering" 0;;
+    esac
+}
+
 handle_hw_acceleration() {
     case $1 in
-        47) enable_all_hw_acceleration;;
-        48) disable_all_hw_acceleration;;
-        49) reset_hw_acceleration;;
-        50) toggle_gpu_profile;;
-        51) toggle_gpu_overdraw;;
+        53) enable_all_hw_acceleration;;
+        54) disable_all_hw_acceleration;;
+        55) reset_hw_acceleration;;
+        56) toggle_gpu_profile;;
+        57) toggle_gpu_overdraw;;
         *) echo -e "${YELLOW}This option is deprecated or invalid.${RESET}";;
     esac
 }
@@ -956,12 +1054,15 @@ show_menu() {
     echo -e " 43. Stay awake: AC + USB"
     echo
     echo -e "${BOLD}--- STATUS BAR ---${RESET}"
-    echo -e " 45. Show clock seconds          46. Hide clock seconds"
+    echo -e " 45. Show clock seconds          49. Show mobile icon"
+    echo -e " 46. Hide clock seconds          50. Hide mobile icon"
+    echo -e " 47. Show Wi-Fi icon             51. Show tethering icon"
+    echo -e " 48. Hide Wi-Fi icon             52. Hide tethering icon"
     echo
     echo -e "${BOLD}--- HARDWARE ACCELERATION ---${RESET}"
-    echo -e " 47. Enable all HW acceleration      50. Toggle GPU Profile Rendering"
-    echo -e " 48. Disable all HW acceleration     51. Toggle GPU Overdraw Debug"
-    echo -e " 49. Reset HW acceleration to default"
+    echo -e " 53. Enable all HW acceleration      56. Toggle GPU Profile Rendering"
+    echo -e " 54. Disable all HW acceleration     57. Toggle GPU Overdraw Debug"
+    echo -e " 55. Reset HW acceleration to default"
     echo
     echo -ne "${BOLD}Select an option: ${RESET}"
 }
@@ -1009,7 +1110,7 @@ while true; do
         [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
         [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
         11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
-        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51)
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
                 run_menu_action handle_rotation "$choice"
             elif [ $choice -ge 20 ] && [ $choice -le 30 ]; then
@@ -1022,7 +1123,9 @@ while true; do
                 run_menu_action handle_stay_awake "$choice"
             elif [ $choice -ge 45 ] && [ $choice -le 46 ]; then
                 run_menu_action handle_clock_seconds "$choice"
-            elif [ $choice -ge 47 ] && [ $choice -le 51 ]; then
+            elif [ $choice -ge 47 ] && [ $choice -le 52 ]; then
+                run_menu_action handle_status_bar_icons "$choice"
+            elif [ $choice -ge 53 ] && [ $choice -le 57 ]; then
                 run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter
