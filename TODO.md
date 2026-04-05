@@ -81,7 +81,7 @@ Implementation notes:
 
 ### 4. Better timeout presets
 
-Status: pending
+Status: done
 
 Expand the current screen timeout menu with common real-world values.
 

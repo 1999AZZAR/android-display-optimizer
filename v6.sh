@@ -7,6 +7,7 @@ fi
 
 # Global variable for selected device
 SELECTED_DEVICE=""
+CAP_ROTATION_WINDOW_CMD=0
 
 # Default color definitions (can be overridden by config.ini)
 BOLD='\033[1m'
@@ -50,6 +51,21 @@ load_config_vars() {
     source <(sed -n '/^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/p' "$config_file" | sed 's/^[[:space:]]*//; s/[[:space:]]*=[[:space:]]*/=/')
 }
 
+detect_device_capabilities() {
+    local window_help status
+
+    CAP_ROTATION_WINDOW_CMD=0
+
+    set +e
+    window_help=$(run_adb shell cmd window help 2>/dev/null | tr -d '\r')
+    status=$?
+    set -e
+
+    if [ $status -eq 0 ] && printf '%s\n' "$window_help" | grep -q "set-allowed-display-rotations"; then
+        CAP_ROTATION_WINDOW_CMD=1
+    fi
+}
+
 check_and_select_device() {
     echo -e "${BLUE}Checking for connected devices...${RESET}"
     mapfile -t DEVICE_LIST < <(adb devices | awk '$2 == "device" {print $1}')
@@ -81,6 +97,7 @@ check_and_select_device() {
             fi
         done
     fi
+    detect_device_capabilities
     echo
 }
 
@@ -314,12 +331,20 @@ set_custom_brightness() {
 }
 
 enable_all_rotations() {
+    if [ "$CAP_ROTATION_WINDOW_CMD" -ne 1 ]; then
+        echo -e "${YELLOW}This device does not support 'cmd window set-allowed-display-rotations'.${RESET}"
+        return 1
+    fi
     echo -e "${BLUE}Enabling all screen rotations (including upside-down)...${RESET}"
     run_adb shell cmd window set-allowed-display-rotations 0,1,2,3
     echo -e "${GREEN}✓ All screen rotations enabled${RESET}"
 }
 
 disable_upside_down_rotation() {
+    if [ "$CAP_ROTATION_WINDOW_CMD" -ne 1 ]; then
+        echo -e "${YELLOW}This device does not support 'cmd window set-allowed-display-rotations'.${RESET}"
+        return 1
+    fi
     echo -e "${BLUE}Disabling upside-down rotation...${RESET}"
     run_adb shell cmd window set-allowed-display-rotations 0,1,3
     echo -e "${GREEN}✓ Upside-down rotation disabled${RESET}"
@@ -524,37 +549,53 @@ handle_rotation() {
 
 handle_screen_timeout() {
     case $1 in
-        20) set_screen_timeout 7;;
-        21) set_screen_timeout 10;;
-        22) set_screen_timeout 15;;
-        23) set_screen_timeout 20;;
-        24) set_custom_screen_timeout;;
+        20) set_screen_timeout 30;;
+        21) set_screen_timeout 60;;
+        22) set_screen_timeout 120;;
+        23) set_screen_timeout 300;;
+        24) set_screen_timeout 600;;
+        25) set_screen_timeout 1800;;
+        26) set_screen_timeout 7;;
+        27) set_screen_timeout 10;;
+        28) set_screen_timeout 15;;
+        29) set_screen_timeout 20;;
+        30) set_custom_screen_timeout;;
     esac
 }
 
 handle_brightness() {
     case $1 in
-        25) set_brightness_mode 0;;
-        26) set_brightness_mode 1;;
-        27) set_brightness 64;;
-        28) set_brightness 128;;
-        29) set_brightness 192;;
-        30) set_custom_brightness;;
+        31) set_brightness_mode 0;;
+        32) set_brightness_mode 1;;
+        33) set_brightness 64;;
+        34) set_brightness 128;;
+        35) set_brightness 192;;
+        36) set_custom_brightness;;
     esac
 }
 
 handle_hw_acceleration() {
     case $1 in
-        31) enable_all_hw_acceleration;;
-        32) disable_all_hw_acceleration;;
-        33) reset_hw_acceleration;;
-        34) toggle_gpu_profile;;
-        35) toggle_gpu_overdraw;;
+        37) enable_all_hw_acceleration;;
+        38) disable_all_hw_acceleration;;
+        39) reset_hw_acceleration;;
+        40) toggle_gpu_profile;;
+        41) toggle_gpu_overdraw;;
         *) echo -e "${YELLOW}This option is deprecated or invalid.${RESET}";;
     esac
 }
 
 show_menu() {
+    local rotation_enable_label rotation_disable_label
+
+    if [ "$CAP_ROTATION_WINDOW_CMD" -eq 1 ]; then
+        rotation_enable_label="13. Enable all rotations"
+        rotation_disable_label="14. Disable upside-down rot."
+    else
+        rotation_enable_label="13. Enable all rotations [unsupported]"
+        rotation_disable_label="14. Disable upside-down rot. [unsupported]"
+    fi
+
     clear
     echo -e "${BOLD}╔═════════════════════════════════════════════════╗${RESET}"
     echo -e "${BOLD}║       Android Display & Performance Optimizer    ║${RESET}"
@@ -576,24 +617,28 @@ show_menu() {
     echo -e "${BOLD}--- DISPLAY & ROTATION ---${RESET}"
     echo -e " 11. Set custom DPI              16. Lock rotation: Portrait"
     echo -e " 12. Reset DPI to default        17. Lock rotation: Landscape"
-    echo -e " 13. Enable all rotations        18. Lock rotation: Upside-down"
-    echo -e " 14. Disable upside-down rot.    19. Lock rotation: Landscape (rev)"
+    echo -e " ${rotation_enable_label}        18. Lock rotation: Upside-down"
+    echo -e " ${rotation_disable_label}    19. Lock rotation: Landscape (rev)"
     echo -e " 15. Toggle auto-rotation"
     echo
     echo -e "${BOLD}--- SCREEN TIMEOUT ---${RESET}"
-    echo -e " 20. Set timeout to 7 seconds    23. Set timeout to 20 seconds"
-    echo -e " 21. Set timeout to 10 seconds   24. Set custom timeout"
-    echo -e " 22. Set timeout to 15 seconds"
+    echo -e " 20. Set timeout to 30 seconds   24. Set timeout to 10 minutes"
+    echo -e " 21. Set timeout to 1 minute     25. Set timeout to 30 minutes"
+    echo -e " 22. Set timeout to 2 minutes    26. Set timeout to 7 seconds"
+    echo -e " 23. Set timeout to 5 minutes    27. Set timeout to 10 seconds"
+    echo -e "                                 28. Set timeout to 15 seconds"
+    echo -e "                                 29. Set timeout to 20 seconds"
+    echo -e "                                 30. Set custom timeout"
     echo
     echo -e "${BOLD}--- BRIGHTNESS ---${RESET}"
-    echo -e " 25. Set mode: manual            28. Set brightness: 128"
-    echo -e " 26. Set mode: adaptive          29. Set brightness: 192"
-    echo -e " 27. Set brightness: 64          30. Set custom brightness"
+    echo -e " 31. Set mode: manual            34. Set brightness: 128"
+    echo -e " 32. Set mode: adaptive          35. Set brightness: 192"
+    echo -e " 33. Set brightness: 64          36. Set custom brightness"
     echo
     echo -e "${BOLD}--- HARDWARE ACCELERATION ---${RESET}"
-    echo -e " 31. Enable all HW acceleration      34. Toggle GPU Profile Rendering"
-    echo -e " 32. Disable all HW acceleration     35. Toggle GPU Overdraw Debug"
-    echo -e " 33. Reset HW acceleration to default"
+    echo -e " 37. Enable all HW acceleration      40. Toggle GPU Profile Rendering"
+    echo -e " 38. Disable all HW acceleration     41. Toggle GPU Overdraw Debug"
+    echo -e " 39. Reset HW acceleration to default"
     echo
     echo -ne "${BOLD}Select an option: ${RESET}"
 }
@@ -619,14 +664,14 @@ while true; do
         [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
         [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
         11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
-        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35)
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
                 run_menu_action handle_rotation "$choice"
-            elif [ $choice -ge 20 ] && [ $choice -le 24 ]; then
+            elif [ $choice -ge 20 ] && [ $choice -le 30 ]; then
                 run_menu_action handle_screen_timeout "$choice"
-            elif [ $choice -ge 25 ] && [ $choice -le 30 ]; then
+            elif [ $choice -ge 31 ] && [ $choice -le 36 ]; then
                 run_menu_action handle_brightness "$choice"
-            elif [ $choice -ge 31 ] && [ $choice -le 35 ]; then
+            elif [ $choice -ge 37 ] && [ $choice -le 41 ]; then
                 run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter

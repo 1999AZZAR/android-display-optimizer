@@ -55,7 +55,8 @@ Display and animation:
 - Reset DPI
 
 Screen timeout:
-- Set screen timeout to `7`, `10`, `15`, or `20` seconds
+- Set screen timeout to `30 seconds`, `1 minute`, `2 minutes`, `5 minutes`, `10 minutes`, or `30 minutes`
+- Keep short test presets for `7`, `10`, `15`, and `20` seconds
 - Set a custom timeout in seconds
 
 Brightness:
@@ -134,6 +135,8 @@ Examples:
 - Some commands exist on one Android version and not another.
 
 When one of those commands fails, `v6.sh` now prints the error and returns to the menu instead of exiting the script.
+
+For commands with a capability probe, unsupported items are marked in the menu before you run them.
 
 ## Backups
 
