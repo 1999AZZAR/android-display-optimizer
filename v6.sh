@@ -8,6 +8,11 @@ fi
 # Global variable for selected device
 SELECTED_DEVICE=""
 CAP_ROTATION_WINDOW_CMD=0
+CAP_NIGHT_MODE_CMD=0
+CAP_FIXED_PERFORMANCE_MODE_CMD=0
+
+ACTION_PARTIAL_SUCCESS=10
+ACTION_HANDLED_FAILURE=11
 
 # Default color definitions (can be overridden by config.ini)
 BOLD='\033[1m'
@@ -30,6 +35,10 @@ run_menu_action() {
     "$@"
     status=$?
     set -e
+
+    if [ $status -eq $ACTION_PARTIAL_SUCCESS ] || [ $status -eq $ACTION_HANDLED_FAILURE ]; then
+        return $status
+    fi
 
     if [ $status -ne 0 ]; then
         echo
@@ -74,11 +83,11 @@ run_step_summary() {
 
     if [ $success_count -gt 0 ]; then
         echo -e "${YELLOW}${action_name} partially completed: ${success_count} succeeded, ${failure_count} failed.${RESET}"
-    else
-        echo -e "${RED}${action_name} failed: all ${failure_count} steps failed.${RESET}"
+        return $ACTION_PARTIAL_SUCCESS
     fi
 
-    return 1
+    echo -e "${RED}${action_name} failed: all ${failure_count} steps failed.${RESET}"
+    return $ACTION_HANDLED_FAILURE
 }
 
 load_config_vars() {
@@ -93,19 +102,50 @@ load_config_vars() {
     source <(sed -n '/^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/p' "$config_file" | sed 's/^[[:space:]]*//; s/[[:space:]]*=[[:space:]]*/=/')
 }
 
-detect_device_capabilities() {
-    local window_help status
+probe_shell_help_contains() {
+    local command_text pattern output status
 
-    CAP_ROTATION_WINDOW_CMD=0
+    command_text=$1
+    pattern=$2
 
     set +e
-    window_help=$(run_adb shell cmd window help 2>/dev/null | tr -d '\r')
+    output=$(run_adb shell "$command_text" 2>/dev/null | tr -d '\r')
     status=$?
     set -e
 
-    if [ $status -eq 0 ] && printf '%s\n' "$window_help" | grep -q "set-allowed-display-rotations"; then
-        CAP_ROTATION_WINDOW_CMD=1
+    if [ $status -eq 0 ] && printf '%s\n' "$output" | grep -q "$pattern"; then
+        return 0
     fi
+
+    return 1
+}
+
+normalize_config_vars() {
+    window_animation_scale="${window_animation_scale:-$(run_adb shell settings get global window_animation_scale | tr -d '\r')}"
+    transition_animation_scale="${transition_animation_scale:-$(run_adb shell settings get global transition_animation_scale | tr -d '\r')}"
+    animator_duration_scale="${animator_duration_scale:-$(run_adb shell settings get global animator_duration_scale | tr -d '\r')}"
+    density="${density:-$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)}"
+    screen_off_timeout="${screen_off_timeout:-$(run_adb shell settings get system screen_off_timeout | tr -d '\r')}"
+    screen_brightness="${screen_brightness:-$(run_adb shell settings get system screen_brightness | tr -d '\r')}"
+    screen_brightness_mode="${screen_brightness_mode:-$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')}"
+    font_scale="${font_scale:-$(run_adb shell settings get system font_scale | tr -d '\r')}"
+    force_gpu_rendering="${force_gpu_rendering:-$(run_adb shell settings get global force_gpu_rendering | tr -d '\r')}"
+    profile_gpu_rendering="${profile_gpu_rendering:-$(run_adb shell getprop debug.hwui.profile | tr -d '\r')}"
+    debug_gpu_overdraw="${debug_gpu_overdraw:-$(run_adb shell getprop debug.hwui.overdraw | tr -d '\r')}"
+    stay_on_while_plugged_in="${stay_on_while_plugged_in:-$(run_adb shell settings get global stay_on_while_plugged_in | tr -d '\r')}"
+    accelerometer_rotation="${accelerometer_rotation:-$(run_adb shell settings get system accelerometer_rotation | tr -d '\r')}"
+    user_rotation="${user_rotation:-$(run_adb shell settings get system user_rotation | tr -d '\r')}"
+    Prefix="${Prefix:-android_settings_}"
+}
+
+detect_device_capabilities() {
+    CAP_ROTATION_WINDOW_CMD=0
+    CAP_NIGHT_MODE_CMD=0
+    CAP_FIXED_PERFORMANCE_MODE_CMD=0
+
+    probe_shell_help_contains "cmd window help" "set-allowed-display-rotations" && CAP_ROTATION_WINDOW_CMD=1
+    probe_shell_help_contains "cmd uimode help" "night" && CAP_NIGHT_MODE_CMD=1
+    probe_shell_help_contains "cmd power help" "set-fixed-performance-mode-enabled" && CAP_FIXED_PERFORMANCE_MODE_CMD=1
 }
 
 check_and_select_device() {
@@ -203,6 +243,7 @@ save_settings_to_config() {
 load_config_to_device() {
     echo -e "${YELLOW}Applying all settings from config.ini to device...${RESET}"
     load_config_vars config.ini
+    normalize_config_vars
 
     # Apply settings
     run_adb shell settings put global window_animation_scale "$window_animation_scale"
@@ -616,6 +657,7 @@ reboot_device() {
 
 backup_settings() {
     load_config_vars config.ini
+    normalize_config_vars
     BACKUP_FILE="${Prefix}$(date +%Y%m%d_%H%M%S).bak"
     echo -e "${BLUE}Performing a full backup of all known settings to ${BACKUP_FILE}...${RESET}"
     save_settings_to_config # Use the same logic to ensure all settings are captured
@@ -850,6 +892,7 @@ wait_for_enter() {
 check_and_select_device
 create_config_if_missing
 load_config_vars config.ini
+normalize_config_vars
 
 while true; do
 
