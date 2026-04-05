@@ -109,6 +109,7 @@ save_settings_to_config() {
         echo
         echo "[Display]"
         echo "density=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)"
+        echo "screen_off_timeout=$(run_adb shell settings get system screen_off_timeout | tr -d '\r')"
         echo
         echo "[HardwareAcceleration]"
         echo "force_gpu_rendering=$(run_adb shell settings get global force_gpu_rendering)"
@@ -142,6 +143,7 @@ load_config_to_device() {
     run_adb shell settings put global transition_animation_scale "$transition_animation_scale"
     run_adb shell settings put global animator_duration_scale "$animator_duration_scale"
     run_adb shell wm density "$density"
+    run_adb shell settings put system screen_off_timeout "$screen_off_timeout"
     run_adb shell settings put global force_gpu_rendering "$force_gpu_rendering"
     run_adb shell setprop debug.hwui.profile "$profile_gpu_rendering"
     run_adb shell setprop debug.hwui.overdraw "$debug_gpu_overdraw"
@@ -228,6 +230,30 @@ reset_dpi() {
     run_adb shell wm density reset
     echo -e "${GREEN}✓ DPI reset to default${RESET}"
     echo -e "${BOLD}Note: You may need to restart your device for changes to take full effect${RESET}"
+}
+
+set_screen_timeout() {
+    local timeout_seconds timeout_millis
+
+    timeout_seconds=$1
+    timeout_millis=$((timeout_seconds * 1000))
+
+    echo -e "${BLUE}Setting screen timeout to ${timeout_seconds} seconds...${RESET}"
+    run_adb shell settings put system screen_off_timeout "$timeout_millis"
+    echo -e "${GREEN}✓ Screen timeout set to ${timeout_seconds} seconds${RESET}"
+}
+
+set_custom_screen_timeout() {
+    local timeout_seconds
+
+    echo -n -e "${BOLD}Enter screen timeout in seconds: ${RESET}"
+    read -r timeout_seconds
+
+    if [[ "$timeout_seconds" =~ ^[0-9]+$ ]] && [ "$timeout_seconds" -gt 0 ]; then
+        set_screen_timeout "$timeout_seconds"
+    else
+        echo -e "${RED}Invalid timeout value. Please enter a positive whole number.${RESET}"
+    fi
 }
 
 enable_all_rotations() {
@@ -439,13 +465,23 @@ handle_rotation() {
     esac
 }
 
+handle_screen_timeout() {
+    case $1 in
+        20) set_screen_timeout 7;;
+        21) set_screen_timeout 10;;
+        22) set_screen_timeout 15;;
+        23) set_screen_timeout 20;;
+        24) set_custom_screen_timeout;;
+    esac
+}
+
 handle_hw_acceleration() {
     case $1 in
-        20) enable_all_hw_acceleration;;
-        23) disable_all_hw_acceleration;;
-        26) reset_hw_acceleration;;
-        27) toggle_gpu_profile;;
-        28) toggle_gpu_overdraw;;
+        25) enable_all_hw_acceleration;;
+        26) disable_all_hw_acceleration;;
+        27) reset_hw_acceleration;;
+        28) toggle_gpu_profile;;
+        29) toggle_gpu_overdraw;;
         *) echo -e "${YELLOW}This option is deprecated or invalid.${RESET}";;
     esac
 }
@@ -476,10 +512,15 @@ show_menu() {
     echo -e " 14. Disable upside-down rot.    19. Lock rotation: Landscape (rev)"
     echo -e " 15. Toggle auto-rotation"
     echo
+    echo -e "${BOLD}--- SCREEN TIMEOUT ---${RESET}"
+    echo -e " 20. Set timeout to 7 seconds    23. Set timeout to 20 seconds"
+    echo -e " 21. Set timeout to 10 seconds   24. Set custom timeout"
+    echo -e " 22. Set timeout to 15 seconds"
+    echo
     echo -e "${BOLD}--- HARDWARE ACCELERATION ---${RESET}"
-    echo -e " 20. Enable all HW acceleration      27. Toggle GPU Profile Rendering"
-    echo -e " 23. Disable all HW acceleration     28. Toggle GPU Overdraw Debug"
-    echo -e " 26. Reset HW acceleration to default"
+    echo -e " 25. Enable all HW acceleration      28. Toggle GPU Profile Rendering"
+    echo -e " 26. Disable all HW acceleration     29. Toggle GPU Overdraw Debug"
+    echo -e " 27. Reset HW acceleration to default"
     echo
     echo -ne "${BOLD}Select an option: ${RESET}"
 }
@@ -505,10 +546,12 @@ while true; do
         [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
         [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
         11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
-        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28)
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
                 run_menu_action handle_rotation "$choice"
-            elif [ $choice -ge 20 ] && [ $choice -le 28 ]; then
+            elif [ $choice -ge 20 ] && [ $choice -le 24 ]; then
+                run_menu_action handle_screen_timeout "$choice"
+            elif [ $choice -ge 25 ] && [ $choice -le 29 ]; then
                 run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter

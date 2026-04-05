@@ -6,6 +6,7 @@
 
 - Animation scales
 - Screen density (`wm density`)
+- Screen timeout (`screen_off_timeout`)
 - Rotation and auto-rotation
 - A small set of hardware acceleration and GPU debug properties
 - Device reboot
@@ -52,6 +53,10 @@ Display and animation:
 - Set custom DPI
 - Reset DPI
 
+Screen timeout:
+- Set screen timeout to `7`, `10`, `15`, or `20` seconds
+- Set a custom timeout in seconds
+
 Rotation:
 - Enable all rotations
 - Disable upside-down rotation
@@ -94,6 +99,7 @@ animator_duration_scale=1.0
 
 [Display]
 density=420
+screen_off_timeout=15000
 
 [HardwareAcceleration]
 force_gpu_rendering=1
