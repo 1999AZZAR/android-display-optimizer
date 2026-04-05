@@ -9,6 +9,7 @@
 - Screen timeout (`screen_off_timeout`)
 - Screen brightness (`screen_brightness`)
 - Font scale (`font_scale`)
+- Status bar clock seconds (`clock_seconds`)
 - Stay-awake while charging (`stay_on_while_plugged_in`)
 - Rotation and auto-rotation
 - A small set of hardware acceleration and GPU debug properties
@@ -68,6 +69,10 @@ Brightness:
 Font scale:
 - Set font scale to `0.85`, `1.0`, `1.15`, `1.3`, or a custom positive value
 
+Status bar:
+- Show the clock seconds in the status bar
+- Hide the clock seconds in the status bar
+
 Power:
 - Disable stay-awake while charging
 - Keep the screen awake while plugged in on `AC + USB`
@@ -122,6 +127,7 @@ screen_off_timeout=15000
 screen_brightness=128
 screen_brightness_mode=0
 font_scale=1.0
+clock_seconds=0
 
 [Power]
 stay_on_while_plugged_in=0

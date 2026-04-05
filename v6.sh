@@ -155,6 +155,10 @@ normalize_config_vars() {
         value=$(run_adb shell settings get system font_scale 2>/dev/null | tr -d '\r' || true)
         font_scale="${value:-1.0}"
     fi
+    if [ -z "${clock_seconds:-}" ]; then
+        value=$(run_adb shell settings get secure clock_seconds 2>/dev/null | tr -d '\r' || true)
+        clock_seconds="${value:-0}"
+    fi
     if [ -z "${force_gpu_rendering:-}" ]; then
         value=$(run_adb shell settings get global force_gpu_rendering 2>/dev/null | tr -d '\r' || true)
         force_gpu_rendering="${value:-0}"
@@ -256,6 +260,7 @@ save_settings_to_config() {
         echo "screen_brightness=$(run_adb shell settings get system screen_brightness | tr -d '\r')"
         echo "screen_brightness_mode=$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')"
         echo "font_scale=$(run_adb shell settings get system font_scale | tr -d '\r')"
+        echo "clock_seconds=$(run_adb shell settings get secure clock_seconds | tr -d '\r')"
         echo
         echo "[HardwareAcceleration]"
         echo "force_gpu_rendering=$(run_adb shell settings get global force_gpu_rendering)"
@@ -298,6 +303,7 @@ load_config_to_device() {
     run_adb shell settings put system screen_brightness_mode "$screen_brightness_mode"
     run_adb shell settings put system screen_brightness "$screen_brightness"
     run_adb shell settings put system font_scale "$font_scale"
+    run_adb shell settings put secure clock_seconds "$clock_seconds"
     run_adb shell settings put global force_gpu_rendering "$force_gpu_rendering"
     run_adb shell setprop debug.hwui.profile "$profile_gpu_rendering"
     run_adb shell setprop debug.hwui.overdraw "$debug_gpu_overdraw"
@@ -317,18 +323,25 @@ get_animation_settings() {
 }
 
 get_dpi_info() {
-    local current_dpi default_dpi current_brightness brightness_mode brightness_mode_label current_font_scale
+    local current_dpi default_dpi current_brightness brightness_mode brightness_mode_label current_font_scale clock_seconds_value clock_seconds_label
 
     current_dpi=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)
     default_dpi=$(run_adb shell getprop ro.sf.lcd_density)
     current_brightness=$(run_adb shell settings get system screen_brightness | tr -d '\r')
     brightness_mode=$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')
     current_font_scale=$(run_adb shell settings get system font_scale | tr -d '\r')
+    clock_seconds_value=$(run_adb shell settings get secure clock_seconds 2>/dev/null | tr -d '\r')
 
     case "$brightness_mode" in
         0) brightness_mode_label="Manual";;
         1) brightness_mode_label="Adaptive";;
         *) brightness_mode_label="Unknown ($brightness_mode)";;
+    esac
+
+    case "$clock_seconds_value" in
+        1) clock_seconds_label="Shown";;
+        0|"") clock_seconds_label="Hidden";;
+        *) clock_seconds_label="Unknown ($clock_seconds_value)";;
     esac
 
     echo -e "${BOLD}Display Information:${RESET}"
@@ -337,6 +350,7 @@ get_dpi_info() {
     echo -e "Brightness: ${GREEN}$current_brightness${RESET} ${YELLOW}(0-255)${RESET}"
     echo -e "Brightness mode: ${GREEN}$brightness_mode_label${RESET}"
     echo -e "Font scale: ${GREEN}$current_font_scale${RESET}"
+    echo -e "Clock seconds: ${GREEN}$clock_seconds_label${RESET}"
 }
 
 get_hw_acceleration_status() {
@@ -568,6 +582,22 @@ set_stay_awake_mode() {
     echo -e "${BLUE}Setting stay-awake mode to ${mode_label}...${RESET}"
     run_adb shell settings put global stay_on_while_plugged_in "$plug_value"
     echo -e "${GREEN}✓ Stay-awake mode set to ${mode_label}${RESET}"
+}
+
+set_clock_seconds() {
+    local clock_value clock_label
+
+    clock_value=$1
+
+    case "$clock_value" in
+        0) clock_label="hidden";;
+        1) clock_label="shown";;
+        *) clock_label="custom ($clock_value)";;
+    esac
+
+    echo -e "${BLUE}Setting status bar clock seconds to ${clock_label}...${RESET}"
+    run_adb shell settings put secure clock_seconds "$clock_value"
+    echo -e "${GREEN}✓ Status bar clock seconds ${clock_label}${RESET}"
 }
 
 enable_all_rotations() {
@@ -848,13 +878,20 @@ handle_stay_awake() {
     esac
 }
 
+handle_clock_seconds() {
+    case $1 in
+        45) set_clock_seconds 1;;
+        46) set_clock_seconds 0;;
+    esac
+}
+
 handle_hw_acceleration() {
     case $1 in
-        45) enable_all_hw_acceleration;;
-        46) disable_all_hw_acceleration;;
-        47) reset_hw_acceleration;;
-        48) toggle_gpu_profile;;
-        49) toggle_gpu_overdraw;;
+        47) enable_all_hw_acceleration;;
+        48) disable_all_hw_acceleration;;
+        49) reset_hw_acceleration;;
+        50) toggle_gpu_profile;;
+        51) toggle_gpu_overdraw;;
         *) echo -e "${YELLOW}This option is deprecated or invalid.${RESET}";;
     esac
 }
@@ -918,10 +955,13 @@ show_menu() {
     echo -e " 42. Stay awake: off             44. Stay awake: AC + USB + wireless"
     echo -e " 43. Stay awake: AC + USB"
     echo
+    echo -e "${BOLD}--- STATUS BAR ---${RESET}"
+    echo -e " 45. Show clock seconds          46. Hide clock seconds"
+    echo
     echo -e "${BOLD}--- HARDWARE ACCELERATION ---${RESET}"
-    echo -e " 45. Enable all HW acceleration      48. Toggle GPU Profile Rendering"
-    echo -e " 46. Disable all HW acceleration     49. Toggle GPU Overdraw Debug"
-    echo -e " 47. Reset HW acceleration to default"
+    echo -e " 47. Enable all HW acceleration      50. Toggle GPU Profile Rendering"
+    echo -e " 48. Disable all HW acceleration     51. Toggle GPU Overdraw Debug"
+    echo -e " 49. Reset HW acceleration to default"
     echo
     echo -ne "${BOLD}Select an option: ${RESET}"
 }
@@ -969,7 +1009,7 @@ while true; do
         [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
         [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
         11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
-        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49)
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
                 run_menu_action handle_rotation "$choice"
             elif [ $choice -ge 20 ] && [ $choice -le 30 ]; then
@@ -980,7 +1020,9 @@ while true; do
                 run_menu_action handle_font_scale "$choice"
             elif [ $choice -ge 42 ] && [ $choice -le 44 ]; then
                 run_menu_action handle_stay_awake "$choice"
-            elif [ $choice -ge 45 ] && [ $choice -le 49 ]; then
+            elif [ $choice -ge 45 ] && [ $choice -le 46 ]; then
+                run_menu_action handle_clock_seconds "$choice"
+            elif [ $choice -ge 47 ] && [ $choice -le 51 ]; then
                 run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter
