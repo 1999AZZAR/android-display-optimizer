@@ -84,6 +84,8 @@ Hardware and GPU:
 
 Utility:
 - Change selected device
+- Show full device info from the header with `i`
+  This view includes serial, manufacturer, brand, model, Android version, SDK, security patch, build ID, ABI list, battery state, memory, `/data` storage, uptime, and Wi-Fi IP when available.
 - Reboot device
 - Back up current settings to a timestamped `.bak` file
 - Restore settings from a backup

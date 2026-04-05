@@ -17,6 +17,31 @@ This file tracks command-set improvements for `v6.sh`. Keep tasks small and land
 
 ## Tasks
 
+### Header full device info
+
+Status: done
+
+Added header shortcut `i` for a fuller device information view.
+
+Current output includes:
+
+- serial
+- manufacturer
+- brand
+- model
+- Android version
+- SDK version
+- security patch
+- build ID
+- build type
+- CPU ABI list
+- screen resolution
+- battery level and status
+- total and available memory
+- `/data` storage line
+- uptime
+- Wi-Fi IP when available
+
 ### 1. Brightness controls
 
 Status: done
