@@ -8,6 +8,7 @@
 - Screen density (`wm density`)
 - Screen timeout (`screen_off_timeout`)
 - Screen brightness (`screen_brightness`)
+- Stay-awake while charging (`stay_on_while_plugged_in`)
 - Rotation and auto-rotation
 - A small set of hardware acceleration and GPU debug properties
 - Device reboot
@@ -63,6 +64,11 @@ Brightness:
 - Set brightness mode to manual or adaptive
 - Set brightness to `64`, `128`, `192`, or a custom `0-255` value
 
+Power:
+- Disable stay-awake while charging
+- Keep the screen awake while plugged in on `AC + USB`
+- Keep the screen awake while plugged in on `AC + USB + wireless`
+
 Rotation:
 - Enable all rotations
 - Disable upside-down rotation
@@ -90,6 +96,7 @@ Current sections:
 
 - `[Animation]`
 - `[Display]`
+- `[Power]`
 - `[HardwareAcceleration]`
 - `[Rotation]`
 - `[Backup]`
@@ -108,6 +115,9 @@ density=420
 screen_off_timeout=15000
 screen_brightness=128
 screen_brightness_mode=0
+
+[Power]
+stay_on_while_plugged_in=0
 
 [HardwareAcceleration]
 force_gpu_rendering=1

@@ -135,6 +135,9 @@ save_settings_to_config() {
         echo "profile_gpu_rendering=$(run_adb shell getprop debug.hwui.profile)"
         echo "debug_gpu_overdraw=$(run_adb shell getprop debug.hwui.overdraw)"
         echo
+        echo "[Power]"
+        echo "stay_on_while_plugged_in=$(run_adb shell settings get global stay_on_while_plugged_in | tr -d '\r')"
+        echo
         echo "[Rotation]"
         echo "accelerometer_rotation=$(run_adb shell settings get system accelerometer_rotation)"
         echo "user_rotation=$(run_adb shell settings get system user_rotation)"
@@ -168,6 +171,7 @@ load_config_to_device() {
     run_adb shell settings put global force_gpu_rendering "$force_gpu_rendering"
     run_adb shell setprop debug.hwui.profile "$profile_gpu_rendering"
     run_adb shell setprop debug.hwui.overdraw "$debug_gpu_overdraw"
+    run_adb shell settings put global stay_on_while_plugged_in "$stay_on_while_plugged_in"
     run_adb shell settings put system accelerometer_rotation "$accelerometer_rotation"
     run_adb shell settings put system user_rotation "$user_rotation"
 
@@ -328,6 +332,23 @@ set_custom_brightness() {
     else
         echo -e "${RED}Invalid brightness value. Please enter a whole number from 0 to 255.${RESET}"
     fi
+}
+
+set_stay_awake_mode() {
+    local plug_value mode_label
+
+    plug_value=$1
+
+    case "$plug_value" in
+        0) mode_label="disabled";;
+        3) mode_label="AC and USB";;
+        7) mode_label="AC, USB, and wireless";;
+        *) mode_label="custom ($plug_value)";;
+    esac
+
+    echo -e "${BLUE}Setting stay-awake mode to ${mode_label}...${RESET}"
+    run_adb shell settings put global stay_on_while_plugged_in "$plug_value"
+    echo -e "${GREEN}✓ Stay-awake mode set to ${mode_label}${RESET}"
 }
 
 enable_all_rotations() {
@@ -574,13 +595,21 @@ handle_brightness() {
     esac
 }
 
+handle_stay_awake() {
+    case $1 in
+        37) set_stay_awake_mode 0;;
+        38) set_stay_awake_mode 3;;
+        39) set_stay_awake_mode 7;;
+    esac
+}
+
 handle_hw_acceleration() {
     case $1 in
-        37) enable_all_hw_acceleration;;
-        38) disable_all_hw_acceleration;;
-        39) reset_hw_acceleration;;
-        40) toggle_gpu_profile;;
-        41) toggle_gpu_overdraw;;
+        40) enable_all_hw_acceleration;;
+        41) disable_all_hw_acceleration;;
+        42) reset_hw_acceleration;;
+        43) toggle_gpu_profile;;
+        44) toggle_gpu_overdraw;;
         *) echo -e "${YELLOW}This option is deprecated or invalid.${RESET}";;
     esac
 }
@@ -635,10 +664,14 @@ show_menu() {
     echo -e " 32. Set mode: adaptive          35. Set brightness: 192"
     echo -e " 33. Set brightness: 64          36. Set custom brightness"
     echo
+    echo -e "${BOLD}--- POWER ---${RESET}"
+    echo -e " 37. Stay awake: off             39. Stay awake: AC + USB + wireless"
+    echo -e " 38. Stay awake: AC + USB"
+    echo
     echo -e "${BOLD}--- HARDWARE ACCELERATION ---${RESET}"
-    echo -e " 37. Enable all HW acceleration      40. Toggle GPU Profile Rendering"
-    echo -e " 38. Disable all HW acceleration     41. Toggle GPU Overdraw Debug"
-    echo -e " 39. Reset HW acceleration to default"
+    echo -e " 40. Enable all HW acceleration      43. Toggle GPU Profile Rendering"
+    echo -e " 41. Disable all HW acceleration     44. Toggle GPU Overdraw Debug"
+    echo -e " 42. Reset HW acceleration to default"
     echo
     echo -ne "${BOLD}Select an option: ${RESET}"
 }
@@ -664,14 +697,16 @@ while true; do
         [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
         [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
         11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
-        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41)
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
                 run_menu_action handle_rotation "$choice"
             elif [ $choice -ge 20 ] && [ $choice -le 30 ]; then
                 run_menu_action handle_screen_timeout "$choice"
             elif [ $choice -ge 31 ] && [ $choice -le 36 ]; then
                 run_menu_action handle_brightness "$choice"
-            elif [ $choice -ge 37 ] && [ $choice -le 41 ]; then
+            elif [ $choice -ge 37 ] && [ $choice -le 39 ]; then
+                run_menu_action handle_stay_awake "$choice"
+            elif [ $choice -ge 40 ] && [ $choice -le 44 ]; then
                 run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter

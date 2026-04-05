@@ -101,7 +101,7 @@ Implementation notes:
 
 ### 5. Stay-awake while charging
 
-Status: pending
+Status: done
 
 Add controls for keeping the screen on while plugged in.
 
