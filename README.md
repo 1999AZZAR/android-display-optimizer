@@ -79,6 +79,9 @@ Status bar:
 - Show or hide the mobile icon
 - Show or hide the tethering icon
 - Show or hide the Bluetooth icon
+- Show or hide the VPN icon
+- Show or hide the Data Saver icon
+- Show or hide the Airplane icon
 - Show or hide the battery percentage
 
 Power:
