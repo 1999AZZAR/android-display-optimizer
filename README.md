@@ -7,6 +7,7 @@
 - Animation scales
 - Screen density (`wm density`)
 - Screen timeout (`screen_off_timeout`)
+- Screen brightness (`screen_brightness`)
 - Rotation and auto-rotation
 - A small set of hardware acceleration and GPU debug properties
 - Device reboot
@@ -43,7 +44,7 @@ On startup the script:
 
 Information:
 - Show animation settings
-- Show DPI
+- Show display info
 - Show device information
 - Show hardware acceleration status
 - Show rotation status
@@ -56,6 +57,10 @@ Display and animation:
 Screen timeout:
 - Set screen timeout to `7`, `10`, `15`, or `20` seconds
 - Set a custom timeout in seconds
+
+Brightness:
+- Set brightness mode to manual or adaptive
+- Set brightness to `64`, `128`, `192`, or a custom `0-255` value
 
 Rotation:
 - Enable all rotations
@@ -100,6 +105,8 @@ animator_duration_scale=1.0
 [Display]
 density=420
 screen_off_timeout=15000
+screen_brightness=128
+screen_brightness_mode=0
 
 [HardwareAcceleration]
 force_gpu_rendering=1

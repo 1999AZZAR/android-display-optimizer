@@ -110,6 +110,8 @@ save_settings_to_config() {
         echo "[Display]"
         echo "density=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)"
         echo "screen_off_timeout=$(run_adb shell settings get system screen_off_timeout | tr -d '\r')"
+        echo "screen_brightness=$(run_adb shell settings get system screen_brightness | tr -d '\r')"
+        echo "screen_brightness_mode=$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')"
         echo
         echo "[HardwareAcceleration]"
         echo "force_gpu_rendering=$(run_adb shell settings get global force_gpu_rendering)"
@@ -144,6 +146,8 @@ load_config_to_device() {
     run_adb shell settings put global animator_duration_scale "$animator_duration_scale"
     run_adb shell wm density "$density"
     run_adb shell settings put system screen_off_timeout "$screen_off_timeout"
+    run_adb shell settings put system screen_brightness_mode "$screen_brightness_mode"
+    run_adb shell settings put system screen_brightness "$screen_brightness"
     run_adb shell settings put global force_gpu_rendering "$force_gpu_rendering"
     run_adb shell setprop debug.hwui.profile "$profile_gpu_rendering"
     run_adb shell setprop debug.hwui.overdraw "$debug_gpu_overdraw"
@@ -162,11 +166,24 @@ get_animation_settings() {
 }
 
 get_dpi_info() {
-    CURRENT_DPI=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)
-    DEFAULT_DPI=$(run_adb shell getprop ro.sf.lcd_density)
-    echo -e "${BOLD}DPI Information:${RESET}"
-    echo -e "Current DPI: ${GREEN}$CURRENT_DPI${RESET}"
-    echo -e "Default DPI: ${GREEN}$DEFAULT_DPI${RESET}"
+    local current_dpi default_dpi current_brightness brightness_mode brightness_mode_label
+
+    current_dpi=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)
+    default_dpi=$(run_adb shell getprop ro.sf.lcd_density)
+    current_brightness=$(run_adb shell settings get system screen_brightness | tr -d '\r')
+    brightness_mode=$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')
+
+    case "$brightness_mode" in
+        0) brightness_mode_label="Manual";;
+        1) brightness_mode_label="Adaptive";;
+        *) brightness_mode_label="Unknown ($brightness_mode)";;
+    esac
+
+    echo -e "${BOLD}Display Information:${RESET}"
+    echo -e "Current DPI: ${GREEN}$current_dpi${RESET}"
+    echo -e "Default DPI: ${GREEN}$default_dpi${RESET}"
+    echo -e "Brightness: ${GREEN}$current_brightness${RESET} ${YELLOW}(0-255)${RESET}"
+    echo -e "Brightness mode: ${GREEN}$brightness_mode_label${RESET}"
 }
 
 get_hw_acceleration_status() {
@@ -253,6 +270,46 @@ set_custom_screen_timeout() {
         set_screen_timeout "$timeout_seconds"
     else
         echo -e "${RED}Invalid timeout value. Please enter a positive whole number.${RESET}"
+    fi
+}
+
+set_brightness_mode() {
+    local brightness_mode brightness_mode_label
+
+    brightness_mode=$1
+
+    case "$brightness_mode" in
+        0) brightness_mode_label="manual";;
+        1) brightness_mode_label="adaptive";;
+        *) brightness_mode_label="unknown";;
+    esac
+
+    echo -e "${BLUE}Setting brightness mode to ${brightness_mode_label}...${RESET}"
+    run_adb shell settings put system screen_brightness_mode "$brightness_mode"
+    echo -e "${GREEN}✓ Brightness mode set to ${brightness_mode_label}${RESET}"
+}
+
+set_brightness() {
+    local brightness_level
+
+    brightness_level=$1
+
+    echo -e "${BLUE}Setting brightness to ${brightness_level}...${RESET}"
+    run_adb shell settings put system screen_brightness_mode 0
+    run_adb shell settings put system screen_brightness "$brightness_level"
+    echo -e "${GREEN}✓ Brightness set to ${brightness_level}${RESET}"
+}
+
+set_custom_brightness() {
+    local brightness_level
+
+    echo -n -e "${BOLD}Enter brightness value (0-255): ${RESET}"
+    read -r brightness_level
+
+    if [[ "$brightness_level" =~ ^[0-9]+$ ]] && [ "$brightness_level" -ge 0 ] && [ "$brightness_level" -le 255 ]; then
+        set_brightness "$brightness_level"
+    else
+        echo -e "${RED}Invalid brightness value. Please enter a whole number from 0 to 255.${RESET}"
     fi
 }
 
@@ -475,13 +532,24 @@ handle_screen_timeout() {
     esac
 }
 
+handle_brightness() {
+    case $1 in
+        25) set_brightness_mode 0;;
+        26) set_brightness_mode 1;;
+        27) set_brightness 64;;
+        28) set_brightness 128;;
+        29) set_brightness 192;;
+        30) set_custom_brightness;;
+    esac
+}
+
 handle_hw_acceleration() {
     case $1 in
-        25) enable_all_hw_acceleration;;
-        26) disable_all_hw_acceleration;;
-        27) reset_hw_acceleration;;
-        28) toggle_gpu_profile;;
-        29) toggle_gpu_overdraw;;
+        31) enable_all_hw_acceleration;;
+        32) disable_all_hw_acceleration;;
+        33) reset_hw_acceleration;;
+        34) toggle_gpu_profile;;
+        35) toggle_gpu_overdraw;;
         *) echo -e "${YELLOW}This option is deprecated or invalid.${RESET}";;
     esac
 }
@@ -497,7 +565,7 @@ show_menu() {
     echo
     echo -e "${BOLD}--- INFORMATION ---${RESET}"
     echo -e "  1. Show animation settings      4. Show HW acceleration status"
-    echo -e "  2. Show current DPI info        5. Show rotation settings"
+    echo -e "  2. Show display info            5. Show rotation settings"
     echo -e "  3. Show device information"
     echo
     echo -e "${BOLD}--- ANIMATION ---${RESET}"
@@ -517,10 +585,15 @@ show_menu() {
     echo -e " 21. Set timeout to 10 seconds   24. Set custom timeout"
     echo -e " 22. Set timeout to 15 seconds"
     echo
+    echo -e "${BOLD}--- BRIGHTNESS ---${RESET}"
+    echo -e " 25. Set mode: manual            28. Set brightness: 128"
+    echo -e " 26. Set mode: adaptive          29. Set brightness: 192"
+    echo -e " 27. Set brightness: 64          30. Set custom brightness"
+    echo
     echo -e "${BOLD}--- HARDWARE ACCELERATION ---${RESET}"
-    echo -e " 25. Enable all HW acceleration      28. Toggle GPU Profile Rendering"
-    echo -e " 26. Disable all HW acceleration     29. Toggle GPU Overdraw Debug"
-    echo -e " 27. Reset HW acceleration to default"
+    echo -e " 31. Enable all HW acceleration      34. Toggle GPU Profile Rendering"
+    echo -e " 32. Disable all HW acceleration     35. Toggle GPU Overdraw Debug"
+    echo -e " 33. Reset HW acceleration to default"
     echo
     echo -ne "${BOLD}Select an option: ${RESET}"
 }
@@ -546,12 +619,14 @@ while true; do
         [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
         [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
         11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
-        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29)
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
                 run_menu_action handle_rotation "$choice"
             elif [ $choice -ge 20 ] && [ $choice -le 24 ]; then
                 run_menu_action handle_screen_timeout "$choice"
-            elif [ $choice -ge 25 ] && [ $choice -le 29 ]; then
+            elif [ $choice -ge 25 ] && [ $choice -le 30 ]; then
+                run_menu_action handle_brightness "$choice"
+            elif [ $choice -ge 31 ] && [ $choice -le 35 ]; then
                 run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter
