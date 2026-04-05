@@ -121,20 +121,64 @@ probe_shell_help_contains() {
 }
 
 normalize_config_vars() {
-    window_animation_scale="${window_animation_scale:-$(run_adb shell settings get global window_animation_scale | tr -d '\r')}"
-    transition_animation_scale="${transition_animation_scale:-$(run_adb shell settings get global transition_animation_scale | tr -d '\r')}"
-    animator_duration_scale="${animator_duration_scale:-$(run_adb shell settings get global animator_duration_scale | tr -d '\r')}"
-    density="${density:-$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)}"
-    screen_off_timeout="${screen_off_timeout:-$(run_adb shell settings get system screen_off_timeout | tr -d '\r')}"
-    screen_brightness="${screen_brightness:-$(run_adb shell settings get system screen_brightness | tr -d '\r')}"
-    screen_brightness_mode="${screen_brightness_mode:-$(run_adb shell settings get system screen_brightness_mode | tr -d '\r')}"
-    font_scale="${font_scale:-$(run_adb shell settings get system font_scale | tr -d '\r')}"
-    force_gpu_rendering="${force_gpu_rendering:-$(run_adb shell settings get global force_gpu_rendering | tr -d '\r')}"
-    profile_gpu_rendering="${profile_gpu_rendering:-$(run_adb shell getprop debug.hwui.profile | tr -d '\r')}"
-    debug_gpu_overdraw="${debug_gpu_overdraw:-$(run_adb shell getprop debug.hwui.overdraw | tr -d '\r')}"
-    stay_on_while_plugged_in="${stay_on_while_plugged_in:-$(run_adb shell settings get global stay_on_while_plugged_in | tr -d '\r')}"
-    accelerometer_rotation="${accelerometer_rotation:-$(run_adb shell settings get system accelerometer_rotation | tr -d '\r')}"
-    user_rotation="${user_rotation:-$(run_adb shell settings get system user_rotation | tr -d '\r')}"
+    local value
+
+    if [ -z "${window_animation_scale:-}" ]; then
+        value=$(run_adb shell settings get global window_animation_scale 2>/dev/null | tr -d '\r' || true)
+        window_animation_scale="${value:-1.0}"
+    fi
+    if [ -z "${transition_animation_scale:-}" ]; then
+        value=$(run_adb shell settings get global transition_animation_scale 2>/dev/null | tr -d '\r' || true)
+        transition_animation_scale="${value:-1.0}"
+    fi
+    if [ -z "${animator_duration_scale:-}" ]; then
+        value=$(run_adb shell settings get global animator_duration_scale 2>/dev/null | tr -d '\r' || true)
+        animator_duration_scale="${value:-1.0}"
+    fi
+    if [ -z "${density:-}" ]; then
+        value=$(run_adb shell wm density 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)
+        density="${value:-420}"
+    fi
+    if [ -z "${screen_off_timeout:-}" ]; then
+        value=$(run_adb shell settings get system screen_off_timeout 2>/dev/null | tr -d '\r' || true)
+        screen_off_timeout="${value:-15000}"
+    fi
+    if [ -z "${screen_brightness:-}" ]; then
+        value=$(run_adb shell settings get system screen_brightness 2>/dev/null | tr -d '\r' || true)
+        screen_brightness="${value:-128}"
+    fi
+    if [ -z "${screen_brightness_mode:-}" ]; then
+        value=$(run_adb shell settings get system screen_brightness_mode 2>/dev/null | tr -d '\r' || true)
+        screen_brightness_mode="${value:-0}"
+    fi
+    if [ -z "${font_scale:-}" ]; then
+        value=$(run_adb shell settings get system font_scale 2>/dev/null | tr -d '\r' || true)
+        font_scale="${value:-1.0}"
+    fi
+    if [ -z "${force_gpu_rendering:-}" ]; then
+        value=$(run_adb shell settings get global force_gpu_rendering 2>/dev/null | tr -d '\r' || true)
+        force_gpu_rendering="${value:-0}"
+    fi
+    if [ -z "${profile_gpu_rendering:-}" ]; then
+        value=$(run_adb shell getprop debug.hwui.profile 2>/dev/null | tr -d '\r' || true)
+        profile_gpu_rendering="${value:-false}"
+    fi
+    if [ -z "${debug_gpu_overdraw:-}" ]; then
+        value=$(run_adb shell getprop debug.hwui.overdraw 2>/dev/null | tr -d '\r' || true)
+        debug_gpu_overdraw="${value:-false}"
+    fi
+    if [ -z "${stay_on_while_plugged_in:-}" ]; then
+        value=$(run_adb shell settings get global stay_on_while_plugged_in 2>/dev/null | tr -d '\r' || true)
+        stay_on_while_plugged_in="${value:-0}"
+    fi
+    if [ -z "${accelerometer_rotation:-}" ]; then
+        value=$(run_adb shell settings get system accelerometer_rotation 2>/dev/null | tr -d '\r' || true)
+        accelerometer_rotation="${value:-1}"
+    fi
+    if [ -z "${user_rotation:-}" ]; then
+        value=$(run_adb shell settings get system user_rotation 2>/dev/null | tr -d '\r' || true)
+        user_rotation="${value:-0}"
+    fi
     Prefix="${Prefix:-android_settings_}"
 }
 
@@ -888,11 +932,32 @@ wait_for_enter() {
     read -r
 }
 
+startup_init() {
+    if ! check_and_select_device; then
+        echo -e "${RED}Startup failed while selecting the device.${RESET}"
+        return 1
+    fi
+
+    if ! create_config_if_missing; then
+        echo -e "${RED}Startup failed while creating or reading config.ini.${RESET}"
+        return 1
+    fi
+
+    if ! load_config_vars config.ini; then
+        echo -e "${RED}Startup failed while loading config.ini.${RESET}"
+        return 1
+    fi
+
+    if ! normalize_config_vars; then
+        echo -e "${RED}Startup failed while normalizing config values.${RESET}"
+        return 1
+    fi
+
+    return 0
+}
+
 # --- Main Execution ---
-check_and_select_device
-create_config_if_missing
-load_config_vars config.ini
-normalize_config_vars
+startup_init || exit 1
 
 while true; do
 
