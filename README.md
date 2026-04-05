@@ -78,6 +78,7 @@ Status bar:
 - Show or hide the Wi-Fi icon
 - Show or hide the mobile icon
 - Show or hide the tethering icon
+- Show or hide the Bluetooth icon
 - Show or hide the battery percentage
 
 Power:
