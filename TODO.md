@@ -4,68 +4,16 @@ This file tracks command-set improvements for `v6.sh`. Keep tasks small and land
 
 ## Priority order
 
-1. Brightness controls
-2. Refresh rate controls
-3. Immersive mode toggles
-4. Better timeout presets
-5. Stay-awake while charging
-6. Font scaling
-7. Command capability checks
-8. Safe vs advanced menu split
-9. Per-command fallback handling
-10. Night mode controls
+1. Refresh rate controls
+2. Immersive mode toggles
+3. Font scaling
+4. Command capability checks
+5. Safe vs advanced menu split
+6. Night mode controls
 
 ## Tasks
 
-### Header full device info
-
-Status: done
-
-Added header shortcut `i` for a fuller device information view.
-
-Current output includes:
-
-- serial
-- manufacturer
-- brand
-- model
-- Android version
-- SDK version
-- security patch
-- build ID
-- build type
-- CPU ABI list
-- screen resolution
-- battery level and status
-- total and available memory
-- `/data` storage line
-- uptime
-- Wi-Fi IP when available
-
-### 1. Brightness controls
-
-Status: done
-
-Add menu options for manual brightness and brightness mode.
-
-Commands:
-
-```bash
-adb shell settings put system screen_brightness <0-255>
-adb shell settings put system screen_brightness_mode 0
-adb shell settings put system screen_brightness_mode 1
-```
-
-Implementation notes:
-
-- Add current brightness info to the information section.
-- Add fixed presets plus one custom value entry.
-- Store brightness values in `config.ini`.
-- Some devices may override manual brightness while adaptive mode is enabled.
-
-### 2. Refresh rate controls
-
-Status: pending
+### 1. Refresh rate controls
 
 Add refresh-rate controls for supported devices.
 
@@ -83,9 +31,7 @@ Implementation notes:
 - Some devices ignore one or more of these keys.
 - This should be guarded with capability checks before exposing the options.
 
-### 3. Immersive mode toggles
-
-Status: pending
+### 2. Immersive mode toggles
 
 Add fullscreen and immersive mode shortcuts.
 
@@ -104,50 +50,7 @@ Implementation notes:
 - Some newer Android versions may ignore this behavior.
 - Document that this is global and affects the whole UI.
 
-### 4. Better timeout presets
-
-Status: done
-
-Expand the current screen timeout menu with common real-world values.
-
-Suggested presets:
-
-- 30 seconds
-- 1 minute
-- 2 minutes
-- 5 minutes
-- 10 minutes
-- 30 minutes
-
-Implementation notes:
-
-- Keep the current custom timeout input.
-- Decide whether to keep the short `7/10/15/20` second presets or move them under an "advanced" or "short test" group.
-
-### 5. Stay-awake while charging
-
-Status: done
-
-Add controls for keeping the screen on while plugged in.
-
-Commands:
-
-```bash
-adb shell settings put global stay_on_while_plugged_in 0
-adb shell settings put global stay_on_while_plugged_in 3
-adb shell settings put global stay_on_while_plugged_in 7
-```
-
-Implementation notes:
-
-- `0` disables it.
-- `3` usually means AC + USB.
-- `7` usually means AC + USB + wireless.
-- Add a short explanation in the menu or README.
-
-### 6. Font scaling
-
-Status: pending
+### 3. Font scaling
 
 Add controls for Android font scale.
 
@@ -163,9 +66,7 @@ Implementation notes:
 - Add custom input.
 - Store the value in `config.ini`.
 
-### 7. Command capability checks
-
-Status: pending
+### 4. Command capability checks
 
 Detect whether a command or settings key is supported before showing or applying options.
 
@@ -183,9 +84,7 @@ Implementation notes:
 - Show unsupported items as hidden or clearly marked.
 - This matters most for hardware, immersive mode, and refresh rate options.
 
-### 8. Safe vs advanced menu split
-
-Status: pending
+### 5. Safe vs advanced menu split
 
 Separate common settings from risky or failure-prone ones.
 
@@ -209,22 +108,7 @@ Implementation notes:
 - This can be done as separate sections in one menu.
 - Keep the current numbering stable where practical.
 
-### 9. Per-command fallback handling
-
-Status: pending
-
-Improve grouped actions so one failing command does not make the whole action look like a complete failure.
-
-Implementation notes:
-
-- Run each command in a guarded helper.
-- Print which sub-step failed.
-- Print whether the overall action was full success, partial success, or failed.
-- Apply this first to hardware acceleration actions.
-
-### 10. Night mode controls
-
-Status: pending
+### 6. Night mode controls
 
 Add Android night mode shortcuts.
 

@@ -40,6 +40,47 @@ run_menu_action() {
     return $status
 }
 
+run_step() {
+    local description status
+
+    description=$1
+    shift
+
+    set +e
+    "$@"
+    status=$?
+    set -e
+
+    if [ $status -eq 0 ]; then
+        echo -e "${GREEN}✓ ${description}${RESET}"
+    else
+        echo -e "${RED}✗ ${description} (exit ${status})${RESET}"
+    fi
+
+    return $status
+}
+
+run_step_summary() {
+    local action_name success_count failure_count
+
+    action_name=$1
+    success_count=$2
+    failure_count=$3
+
+    if [ $failure_count -eq 0 ]; then
+        echo -e "${GREEN}✓ ${action_name} completed successfully${RESET}"
+        return 0
+    fi
+
+    if [ $success_count -gt 0 ]; then
+        echo -e "${YELLOW}${action_name} partially completed: ${success_count} succeeded, ${failure_count} failed.${RESET}"
+    else
+        echo -e "${RED}${action_name} failed: all ${failure_count} steps failed.${RESET}"
+    fi
+
+    return 1
+}
+
 load_config_vars() {
     local config_file="${1:-config.ini}"
 
@@ -463,31 +504,46 @@ toggle_auto_rotation() {
 }
 
 enable_all_hw_acceleration() {
+    local success_count failure_count
+
+    success_count=0
+    failure_count=0
+
     echo -e "${BLUE}Enabling all hardware acceleration features...${RESET}"
-    run_adb shell setprop debug.hwui.render_dirty_regions true
-    run_adb shell setprop persist.sys.ui.hw 1
-    run_adb shell settings put global force_gpu_rendering 1
-    echo -e "${GREEN}✓ All hardware acceleration features enabled${RESET}"
+    run_step "Enable HWUI dirty region rendering" run_adb shell setprop debug.hwui.render_dirty_regions true && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Enable persist.sys.ui.hw" run_adb shell setprop persist.sys.ui.hw 1 && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Enable force GPU rendering" run_adb shell settings put global force_gpu_rendering 1 && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step_summary "Hardware acceleration enable" "$success_count" "$failure_count"
     echo -e "${BOLD}Note: A device restart is recommended for changes to take full effect${RESET}"
 }
 
 disable_all_hw_acceleration() {
+    local success_count failure_count
+
+    success_count=0
+    failure_count=0
+
     echo -e "${BLUE}Disabling all hardware acceleration features...${RESET}"
-    run_adb shell setprop debug.hwui.render_dirty_regions false
-    run_adb shell setprop persist.sys.ui.hw 0
-    run_adb shell settings put global force_gpu_rendering 0
-    echo -e "${GREEN}✓ All hardware acceleration features disabled${RESET}"
+    run_step "Disable HWUI dirty region rendering" run_adb shell setprop debug.hwui.render_dirty_regions false && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Disable persist.sys.ui.hw" run_adb shell setprop persist.sys.ui.hw 0 && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Disable force GPU rendering" run_adb shell settings put global force_gpu_rendering 0 && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step_summary "Hardware acceleration disable" "$success_count" "$failure_count"
     echo -e "${BOLD}Note: A device restart is recommended for changes to take full effect${RESET}"
 }
 
 reset_hw_acceleration() {
+    local success_count failure_count
+
+    success_count=0
+    failure_count=0
+
     echo -e "${BLUE}Resetting hardware acceleration to device defaults...${RESET}"
-    run_adb shell setprop debug.hwui.render_dirty_regions ""
-    run_adb shell setprop persist.sys.ui.hw ""
-    run_adb shell settings delete global force_gpu_rendering
-    run_adb shell setprop debug.hwui.profile false
-    run_adb shell setprop debug.hwui.overdraw false
-    echo -e "${GREEN}✓ Hardware acceleration reset to system defaults${RESET}"
+    run_step "Reset HWUI dirty region rendering" run_adb shell setprop debug.hwui.render_dirty_regions "" && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Reset persist.sys.ui.hw" run_adb shell setprop persist.sys.ui.hw "" && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Delete force GPU rendering override" run_adb shell settings delete global force_gpu_rendering && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Disable GPU profile rendering" run_adb shell setprop debug.hwui.profile false && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step "Disable GPU overdraw debug" run_adb shell setprop debug.hwui.overdraw false && success_count=$((success_count + 1)) || failure_count=$((failure_count + 1))
+    run_step_summary "Hardware acceleration reset" "$success_count" "$failure_count"
     echo -e "${BOLD}Note: A device restart is recommended for changes to take full effect${RESET}"
 }
 
