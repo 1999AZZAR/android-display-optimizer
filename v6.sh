@@ -62,6 +62,19 @@ get_secure_setting_value() {
     printf '%s\n' "$value"
 }
 
+get_system_setting_value() {
+    local key value
+
+    key=$1
+    value=$(run_adb shell settings get system "$key" 2>/dev/null | tr -d '\r' || true)
+
+    if [ "$value" = "null" ]; then
+        value=""
+    fi
+
+    printf '%s\n' "$value"
+}
+
 run_step() {
     local description status
 
@@ -176,6 +189,18 @@ normalize_config_vars() {
         value=$(get_secure_setting_value icon_blacklist)
         icon_blacklist="${value:-}"
     fi
+    if [ -z "${status_bar_show_battery_percent:-}" ]; then
+        value=$(get_system_setting_value status_bar_show_battery_percent)
+        status_bar_show_battery_percent="${value:-0}"
+    fi
+    if [ -z "${show_touches:-}" ]; then
+        value=$(get_system_setting_value show_touches)
+        show_touches="${value:-0}"
+    fi
+    if [ -z "${pointer_location:-}" ]; then
+        value=$(get_system_setting_value pointer_location)
+        pointer_location="${value:-0}"
+    fi
     if [ -z "${force_gpu_rendering:-}" ]; then
         value=$(run_adb shell settings get global force_gpu_rendering 2>/dev/null | tr -d '\r' || true)
         force_gpu_rendering="${value:-0}"
@@ -281,6 +306,11 @@ save_settings_to_config() {
         echo "[StatusBar]"
         echo "clock_seconds=$(get_secure_setting_value clock_seconds)"
         echo "icon_blacklist=$(get_secure_setting_value icon_blacklist)"
+        echo "status_bar_show_battery_percent=$(get_system_setting_value status_bar_show_battery_percent)"
+        echo
+        echo "[InputDebug]"
+        echo "show_touches=$(get_system_setting_value show_touches)"
+        echo "pointer_location=$(get_system_setting_value pointer_location)"
         echo
         echo "[HardwareAcceleration]"
         echo "force_gpu_rendering=$(run_adb shell settings get global force_gpu_rendering)"
@@ -324,6 +354,9 @@ load_config_to_device() {
     run_adb shell settings put system screen_brightness "$screen_brightness"
     run_adb shell settings put system font_scale "$font_scale"
     run_adb shell settings put secure clock_seconds "$clock_seconds"
+    run_adb shell settings put system status_bar_show_battery_percent "$status_bar_show_battery_percent"
+    run_adb shell settings put system show_touches "$show_touches"
+    run_adb shell settings put system pointer_location "$pointer_location"
     if [ -n "$icon_blacklist" ]; then
         run_adb shell settings put secure icon_blacklist "$icon_blacklist"
     else
@@ -348,7 +381,7 @@ get_animation_settings() {
 }
 
 get_dpi_info() {
-    local current_dpi default_dpi current_brightness brightness_mode brightness_mode_label current_font_scale clock_seconds_value clock_seconds_label blacklist_value wifi_icon_label mobile_icon_label tethering_icon_label
+    local current_dpi default_dpi current_brightness brightness_mode brightness_mode_label current_font_scale clock_seconds_value clock_seconds_label blacklist_value wifi_icon_label mobile_icon_label tethering_icon_label battery_percent_value battery_percent_label show_touches_value show_touches_label pointer_location_value pointer_location_label
 
     current_dpi=$(run_adb shell wm density | grep -oE '[0-9]+' | head -1)
     default_dpi=$(run_adb shell getprop ro.sf.lcd_density)
@@ -357,6 +390,9 @@ get_dpi_info() {
     current_font_scale=$(run_adb shell settings get system font_scale | tr -d '\r')
     clock_seconds_value=$(get_secure_setting_value clock_seconds)
     blacklist_value=$(get_secure_setting_value icon_blacklist)
+    battery_percent_value=$(get_system_setting_value status_bar_show_battery_percent)
+    show_touches_value=$(get_system_setting_value show_touches)
+    pointer_location_value=$(get_system_setting_value pointer_location)
 
     case "$brightness_mode" in
         0) brightness_mode_label="Manual";;
@@ -385,6 +421,24 @@ get_dpi_info() {
         *) tethering_icon_label="Shown";;
     esac
 
+    case "$battery_percent_value" in
+        1) battery_percent_label="Shown";;
+        0|"") battery_percent_label="Hidden";;
+        *) battery_percent_label="Unknown ($battery_percent_value)";;
+    esac
+
+    case "$show_touches_value" in
+        1) show_touches_label="Enabled";;
+        0|"") show_touches_label="Disabled";;
+        *) show_touches_label="Unknown ($show_touches_value)";;
+    esac
+
+    case "$pointer_location_value" in
+        1) pointer_location_label="Enabled";;
+        0|"") pointer_location_label="Disabled";;
+        *) pointer_location_label="Unknown ($pointer_location_value)";;
+    esac
+
     echo -e "${BOLD}Display Information:${RESET}"
     echo -e "Current DPI: ${GREEN}$current_dpi${RESET}"
     echo -e "Default DPI: ${GREEN}$default_dpi${RESET}"
@@ -395,6 +449,9 @@ get_dpi_info() {
     echo -e "Wi-Fi icon: ${GREEN}$wifi_icon_label${RESET}"
     echo -e "Mobile icon: ${GREEN}$mobile_icon_label${RESET}"
     echo -e "Tethering icon: ${GREEN}$tethering_icon_label${RESET}"
+    echo -e "Battery percentage: ${GREEN}$battery_percent_label${RESET}"
+    echo -e "Show touches: ${GREEN}$show_touches_label${RESET}"
+    echo -e "Pointer location: ${GREEN}$pointer_location_label${RESET}"
 }
 
 get_hw_acceleration_status() {
@@ -684,6 +741,25 @@ set_status_bar_icon_visibility() {
         echo -e "${GREEN}✓ ${icon_label} icon shown${RESET}"
     else
         echo -e "${GREEN}✓ ${icon_label} icon hidden${RESET}"
+    fi
+}
+
+set_system_toggle() {
+    local setting_key setting_label setting_value enabled_label disabled_label
+
+    setting_key=$1
+    setting_label=$2
+    setting_value=$3
+    enabled_label=${4:-enabled}
+    disabled_label=${5:-disabled}
+
+    echo -e "${BLUE}Updating ${setting_label}...${RESET}"
+    run_adb shell settings put system "$setting_key" "$setting_value"
+
+    if [ "$setting_value" -eq 1 ]; then
+        echo -e "${GREEN}✓ ${setting_label} ${enabled_label}${RESET}"
+    else
+        echo -e "${GREEN}✓ ${setting_label} ${disabled_label}${RESET}"
     fi
 }
 
@@ -980,16 +1056,27 @@ handle_status_bar_icons() {
         50) set_status_bar_icon_visibility mobile "Mobile" 0;;
         51) set_status_bar_icon_visibility hotspot "Tethering" 1;;
         52) set_status_bar_icon_visibility hotspot "Tethering" 0;;
+        53) set_system_toggle status_bar_show_battery_percent "Battery percentage" 1 shown hidden;;
+        54) set_system_toggle status_bar_show_battery_percent "Battery percentage" 0 shown hidden;;
+    esac
+}
+
+handle_input_debug() {
+    case $1 in
+        55) set_system_toggle show_touches "Show touches" 1 enabled disabled;;
+        56) set_system_toggle show_touches "Show touches" 0 enabled disabled;;
+        57) set_system_toggle pointer_location "Pointer location" 1 enabled disabled;;
+        58) set_system_toggle pointer_location "Pointer location" 0 enabled disabled;;
     esac
 }
 
 handle_hw_acceleration() {
     case $1 in
-        53) enable_all_hw_acceleration;;
-        54) disable_all_hw_acceleration;;
-        55) reset_hw_acceleration;;
-        56) toggle_gpu_profile;;
-        57) toggle_gpu_overdraw;;
+        59) enable_all_hw_acceleration;;
+        60) disable_all_hw_acceleration;;
+        61) reset_hw_acceleration;;
+        62) toggle_gpu_profile;;
+        63) toggle_gpu_overdraw;;
         *) echo -e "${YELLOW}This option is deprecated or invalid.${RESET}";;
     esac
 }
@@ -1058,11 +1145,16 @@ show_menu() {
     echo -e " 46. Hide clock seconds          50. Hide mobile icon"
     echo -e " 47. Show Wi-Fi icon             51. Show tethering icon"
     echo -e " 48. Hide Wi-Fi icon             52. Hide tethering icon"
+    echo -e " 53. Show battery percentage     54. Hide battery percentage"
+    echo
+    echo -e "${BOLD}--- INPUT DEBUG ---${RESET}"
+    echo -e " 55. Enable show touches         57. Enable pointer location"
+    echo -e " 56. Disable show touches        58. Disable pointer location"
     echo
     echo -e "${BOLD}--- HARDWARE ACCELERATION ---${RESET}"
-    echo -e " 53. Enable all HW acceleration      56. Toggle GPU Profile Rendering"
-    echo -e " 54. Disable all HW acceleration     57. Toggle GPU Overdraw Debug"
-    echo -e " 55. Reset HW acceleration to default"
+    echo -e " 59. Enable all HW acceleration      62. Toggle GPU Profile Rendering"
+    echo -e " 60. Disable all HW acceleration     63. Toggle GPU Overdraw Debug"
+    echo -e " 61. Reset HW acceleration to default"
     echo
     echo -ne "${BOLD}Select an option: ${RESET}"
 }
@@ -1110,7 +1202,7 @@ while true; do
         [1-5]) run_menu_action handle_info "$choice"; wait_for_enter;;
         [6-9]|10) run_menu_action handle_animation "$choice"; wait_for_enter;;
         11|12) run_menu_action handle_dpi "$choice"; wait_for_enter;;
-        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57)
+        13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63)
             if [ $choice -ge 13 ] && [ $choice -le 19 ]; then
                 run_menu_action handle_rotation "$choice"
             elif [ $choice -ge 20 ] && [ $choice -le 30 ]; then
@@ -1123,9 +1215,11 @@ while true; do
                 run_menu_action handle_stay_awake "$choice"
             elif [ $choice -ge 45 ] && [ $choice -le 46 ]; then
                 run_menu_action handle_clock_seconds "$choice"
-            elif [ $choice -ge 47 ] && [ $choice -le 52 ]; then
+            elif [ $choice -ge 47 ] && [ $choice -le 54 ]; then
                 run_menu_action handle_status_bar_icons "$choice"
-            elif [ $choice -ge 53 ] && [ $choice -le 57 ]; then
+            elif [ $choice -ge 55 ] && [ $choice -le 58 ]; then
+                run_menu_action handle_input_debug "$choice"
+            elif [ $choice -ge 59 ] && [ $choice -le 63 ]; then
                 run_menu_action handle_hw_acceleration "$choice"
             fi
             wait_for_enter

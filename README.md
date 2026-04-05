@@ -11,7 +11,9 @@
 - Font scale (`font_scale`)
 - Status bar clock seconds (`clock_seconds`)
 - Status bar icon visibility via `icon_blacklist`
+- Battery percentage (`status_bar_show_battery_percent`)
 - Stay-awake while charging (`stay_on_while_plugged_in`)
+- Touch debug toggles (`show_touches`, `pointer_location`)
 - Rotation and auto-rotation
 - A small set of hardware acceleration and GPU debug properties
 - Device reboot
@@ -76,11 +78,16 @@ Status bar:
 - Show or hide the Wi-Fi icon
 - Show or hide the mobile icon
 - Show or hide the tethering icon
+- Show or hide the battery percentage
 
 Power:
 - Disable stay-awake while charging
 - Keep the screen awake while plugged in on `AC + USB`
 - Keep the screen awake while plugged in on `AC + USB + wireless`
+
+Input debug:
+- Enable or disable `show_touches`
+- Enable or disable `pointer_location`
 
 Rotation:
 - Enable all rotations
@@ -112,6 +119,7 @@ Current sections:
 - `[Animation]`
 - `[Display]`
 - `[StatusBar]`
+- `[InputDebug]`
 - `[Power]`
 - `[HardwareAcceleration]`
 - `[Rotation]`
@@ -136,6 +144,11 @@ font_scale=1.0
 [StatusBar]
 clock_seconds=0
 icon_blacklist=
+status_bar_show_battery_percent=0
+
+[InputDebug]
+show_touches=0
+pointer_location=0
 
 [Power]
 stay_on_while_plugged_in=0
