@@ -1,155 +1,160 @@
 # Android Display & Performance Optimizer
 
-A highly configurable, menu-driven Bash script to finely tune your Android device's display and performance settings via ADB. Quickly adjust animation scales, DPI, screen rotation, and hardware acceleration with simple, color-coded menus.
+`v6.sh` is a Bash menu for changing common Android display and developer settings over ADB. It works with one or more connected devices and keeps a local `config.ini` plus optional `.bak` backups of captured settings.
 
-## Features
+## What it changes
 
-- **Device Management**:
-  - Automatically detects and supports multiple connected devices.
-  - Allows for easy device switching without restarting the script.
+- Animation scales
+- Screen density (`wm density`)
+- Rotation and auto-rotation
+- A small set of hardware acceleration and GPU debug properties
+- Device reboot
 
-- **Configuration Management**:
-  - **Easy Customization**: Uses a simple `config.ini` file to let you define your own default values for the menu options.
-  - **Automatic Setup**: Creates a default `config.ini` on the first run, so you can start immediately.
-  - **Color Themes**: Customize the script's colors by editing the `[Colors]` section in `config.ini`.
+## Requirements
 
-- **Backup & Restore**:
-  - **Save Settings**: Back up all current device settings (Animations, DPI, HW Acceleration, Rotation) to a timestamped `.bak` file.
-  - **Restore Settings**: Easily list and apply settings from any previous backup, making it safe to experiment.
-  - **Custom Backup Prefix**: Set a custom prefix for your backup files in `config.ini`.
+- Bash
+- `adb` in `PATH`
+- USB debugging enabled on the Android device
+- A connected device that appears as `device` in `adb devices`
 
-- **Animation Controls**:
-  - View current settings and instantly set them to common or custom values.
-  - Quickly disable all animations (0.0x) for maximum performance.
+## Install
 
-- **Display & Rotation**:
-  - View and manage DPI (screen density).
-  - Full control over screen rotation, including locking to any orientation and toggling auto-rotation.
+```bash
+git clone https://github.com/1999AZZAR/android-display-optimizer.git
+cd android-display-optimizer
+chmod +x v6.sh
+```
 
-- **Hardware Acceleration & Debugging**:
-  - View detailed hardware acceleration status.
-  - Enable, disable, or reset all hardware acceleration features.
-  - **Toggle GPU Profile Rendering**: An on-screen graph to visualize GPU rendering performance.
-  - **Toggle GPU Overdraw Debugging**: Color-codes the screen to show where apps are drawing over the same area multiple times.
+## Run
 
-- **Device Utilities**:
-  - Display detailed device information (Model, Android Version, etc.).
-  - Simple, one-key device reboot with automatic reconnection detection.
+```bash
+./v6.sh
+```
 
-## Prerequisites
+On startup the script:
 
-1.  A Bash shell (standard on Linux/macOS; available on Windows via WSL or Git Bash).
-2.  **ADB (Android Debug Bridge)** installed and accessible in your system's PATH.
-3.  **USB Debugging** enabled in Developer Options on your Android device.
-4.  A USB connection between your computer and your Android device.
+1. Detects connected devices and asks you to choose one if more than one is available.
+2. Creates `config.ini` if it does not exist yet.
+3. Loads values from `config.ini`.
+4. Shows the interactive menu.
 
-## Installation
+## Menu summary
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/1999AZZAR/android-display-optimizer.git
-    ```
+Information:
+- Show animation settings
+- Show DPI
+- Show device information
+- Show hardware acceleration status
+- Show rotation status
 
-2.  Navigate into the project directory:
-    ```bash
-    cd android-display-optimizer
-    ```
+Display and animation:
+- Set animation scale to `1.0`, `0.9`, `0.75`, custom, or `0.0`
+- Set custom DPI
+- Reset DPI
 
-3.  Make the script executable:
-    ```bash
-    chmod +x v6.sh
-    ```
+Rotation:
+- Enable all rotations
+- Disable upside-down rotation
+- Toggle auto-rotation
+- Lock rotation to portrait, landscape, upside-down, or reverse landscape
 
-## Usage
+Hardware and GPU:
+- Enable hardware acceleration related settings
+- Disable them
+- Reset them
+- Toggle GPU profile rendering
+- Toggle GPU overdraw debugging
 
-1.  Connect your Android device to your computer via USB.
-2.  Run the script from your terminal:
-    ```bash
-    ./v6.sh
-    ```
-3.  On the first run, a `config.ini` file will be created for you.
-4.  Use the number or letter keys to select an option from the menu.
+Utility:
+- Change selected device
+- Reboot device
+- Back up current settings to a timestamped `.bak` file
+- Restore settings from a backup
 
-## Configuration
+## `config.ini`
 
-This script uses a `config.ini` file to allow for easy customization. When you run the script for the first time, it will automatically generate this file with default values. You can edit this file to change the presets offered in the menu.
+The script generates `config.ini` from the current state of the selected device. It stores values the script can read and write directly.
 
-**Example `config.ini`:**
+Current sections:
+
+- `[Animation]`
+- `[Display]`
+- `[HardwareAcceleration]`
+- `[Rotation]`
+- `[Backup]`
+- `[Colors]`
+
+Example:
+
 ```ini
-[AnimationScales]
-Default = 1.0
-Option1 = 0.9
-Option2 = 0.75
+[Animation]
+window_animation_scale=1.0
+transition_animation_scale=1.0
+animator_duration_scale=1.0
 
-[DPI]
-Default = 480
-Custom = 420
+[Display]
+density=420
 
-[Colors]
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-RESET='\033[0m'
+[HardwareAcceleration]
+force_gpu_rendering=1
+profile_gpu_rendering=false
+debug_gpu_overdraw=false
+
+[Rotation]
+accelerometer_rotation=1
+user_rotation=0
 
 [Backup]
-Prefix = android_settings_
+Prefix=android_settings_
 ```
 
-## Menu Overview
+`[Colors]` is also written to the file and controls the terminal color codes used by the script.
 
-The menu provides easy access to all features. New options for backup and restore have been added.
+## Notes on Android support
 
-```
-╔═════════════════════════════════════════════════╗
-║       Android Display & Performance Optimizer    ║
-╚═════════════════════════════════════════════════╝
+This script sends standard `adb shell settings`, `adb shell wm`, `adb shell cmd window`, and `adb shell setprop` commands. Android support is not uniform across devices and ROMs.
 
-SELECTED DEVICE: R58M456B76X (SM-A515F)
-c. Change device   r. Reboot device   b. Backup settings
-s. Restore settings                   0. Exit
+Examples:
 
---- INFORMATION ---
-  1. Show animation settings      4. Show HW acceleration status
-  2. Show current DPI info        5. Show rotation settings
-  3. Show device information
+- Some `setprop` targets are read-only.
+- Some values require root.
+- Some commands exist on one Android version and not another.
 
---- ANIMATION (Using values from config.ini) ---
-  6. Set animations to 1.0x       9. Set custom animation scale
-  7. Set animations to 0.9x      10. Turn off animations (0.0x)
-  8. Set animations to 0.75x
+When one of those commands fails, `v6.sh` now prints the error and returns to the menu instead of exiting the script.
 
---- DISPLAY & ROTATION ---
- 11. Set custom DPI              16. Lock rotation: Portrait
- 12. Reset DPI to default        17. Lock rotation: Landscape
- 13. Enable all rotations        18. Lock rotation: Upside-down
- 14. Disable upside-down rot.    19. Lock rotation: Landscape (rev)
- 15. Toggle auto-rotation
+## Backups
 
---- HARDWARE ACCELERATION & DEBUGGING ---
- 20. Enable all HW acceleration      27. Toggle GPU Profile Rendering
- 23. Disable all HW acceleration     28. Toggle GPU Overdraw Debug
- 26. Reset HW acceleration to default
+`b` writes the current device state to a timestamped backup file using the prefix from `config.ini`.
 
-... and more options for Display, Rotation, and HW Acceleration.
-```
-
-## ⚠️ Important Notes & Disclaimer
-
--   **Use with caution.** Modifying system settings can impact device performance, stability, and appearance.
--   A **device restart** is often recommended for changes to take full effect.
--   The **backup** feature is your safety net. It is highly recommended to back up your settings before making significant changes.
--   The developers of this script are not responsible for any damage or issues that may arise from its use.
+`s` lists `*.bak` files in the current directory and applies the selected backup back to the device.
 
 ## Troubleshooting
 
-If you encounter issues, try these steps:
+If the script cannot see the device:
 
-1.  **Verify ADB**: Run `adb version` to ensure it's installed.
-2.  **Check Connection**: Run `adb devices` to see if your device is listed and authorized.
-3.  **Restart ADB Server**: Run `adb kill-server && adb start-server` to reset the connection.
+```bash
+adb devices
+```
+
+If the device is listed as `unauthorized`, confirm the debugging prompt on the phone and run:
+
+```bash
+adb kill-server
+adb start-server
+adb devices
+```
+
+If a menu action fails:
+
+- Read the ADB error message shown in the terminal.
+- Check whether the setting exists on your Android version.
+- Check whether the device or ROM requires root for that change.
+
+## Repository files
+
+- `v6.sh`: main script
+- `config.ini`: generated local configuration
 
 ## Contributing
 
-Contributions are welcome! Fork the repo, create a feature branch, and submit a Pull Request.
+If you change the script, update the README when menu options, config keys, or command behavior changes.
