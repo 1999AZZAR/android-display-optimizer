@@ -8,6 +8,7 @@
 - Screen density (`wm density`)
 - Screen timeout (`screen_off_timeout`)
 - Screen brightness (`screen_brightness`)
+- Font scale (`font_scale`)
 - Stay-awake while charging (`stay_on_while_plugged_in`)
 - Rotation and auto-rotation
 - A small set of hardware acceleration and GPU debug properties
@@ -64,6 +65,9 @@ Brightness:
 - Set brightness mode to manual or adaptive
 - Set brightness to `64`, `128`, `192`, or a custom `0-255` value
 
+Font scale:
+- Set font scale to `0.85`, `1.0`, `1.15`, `1.3`, or a custom positive value
+
 Power:
 - Disable stay-awake while charging
 - Keep the screen awake while plugged in on `AC + USB`
@@ -117,6 +121,7 @@ density=420
 screen_off_timeout=15000
 screen_brightness=128
 screen_brightness_mode=0
+font_scale=1.0
 
 [Power]
 stay_on_while_plugged_in=0

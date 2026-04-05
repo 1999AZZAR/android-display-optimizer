@@ -6,10 +6,9 @@ This file tracks command-set improvements for `v6.sh`. Keep tasks small and land
 
 1. Refresh rate controls
 2. Immersive mode toggles
-3. Font scaling
-4. Command capability checks
-5. Safe vs advanced menu split
-6. Night mode controls
+3. Command capability checks
+4. Safe vs advanced menu split
+5. Night mode controls
 
 ## Tasks
 
@@ -50,23 +49,7 @@ Implementation notes:
 - Some newer Android versions may ignore this behavior.
 - Document that this is global and affects the whole UI.
 
-### 3. Font scaling
-
-Add controls for Android font scale.
-
-Commands:
-
-```bash
-adb shell settings put system font_scale <value>
-```
-
-Implementation notes:
-
-- Add fixed values like `0.85`, `1.0`, `1.15`, `1.3`.
-- Add custom input.
-- Store the value in `config.ini`.
-
-### 4. Command capability checks
+### 3. Command capability checks
 
 Detect whether a command or settings key is supported before showing or applying options.
 
@@ -84,7 +67,7 @@ Implementation notes:
 - Show unsupported items as hidden or clearly marked.
 - This matters most for hardware, immersive mode, and refresh rate options.
 
-### 5. Safe vs advanced menu split
+### 4. Safe vs advanced menu split
 
 Separate common settings from risky or failure-prone ones.
 
@@ -108,7 +91,7 @@ Implementation notes:
 - This can be done as separate sections in one menu.
 - Keep the current numbering stable where practical.
 
-### 6. Night mode controls
+### 5. Night mode controls
 
 Add Android night mode shortcuts.
 
