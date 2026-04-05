@@ -13,6 +13,7 @@ CAP_ROTATION_WINDOW_CMD=0
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 RESET='\033[0m'
@@ -149,6 +150,7 @@ save_settings_to_config() {
         echo "BOLD='\033[1m'"
         echo "GREEN='\033[0;32m'"
         echo "BLUE='\033[0;34m'"
+        echo "CYAN='\033[0;36m'"
         echo "YELLOW='\033[0;33m'"
         echo "RED='\033[0;31m'"
         echo "RESET='\033[0m'"
@@ -222,6 +224,70 @@ get_device_info() {
     echo -e "Android Version: ${GREEN}$(run_adb shell getprop ro.build.version.release)${RESET}"
     echo -e "SDK Version: ${GREEN}$(run_adb shell getprop ro.build.version.sdk)${RESET}"
     echo -e "Screen Resolution: ${GREEN}$(run_adb shell wm size)${RESET}"
+}
+
+get_full_device_info() {
+    local manufacturer brand device_name android_version sdk_version security_patch
+    local build_id build_type abi_list serial battery_line battery_level battery_status
+    local mem_total mem_available storage_line uptime_seconds uptime_human ip_address
+
+    manufacturer=$(run_adb shell getprop ro.product.manufacturer | tr -d '\r')
+    brand=$(run_adb shell getprop ro.product.brand | tr -d '\r')
+    device_name=$(run_adb shell getprop ro.product.model | tr -d '\r')
+    android_version=$(run_adb shell getprop ro.build.version.release | tr -d '\r')
+    sdk_version=$(run_adb shell getprop ro.build.version.sdk | tr -d '\r')
+    security_patch=$(run_adb shell getprop ro.build.version.security_patch | tr -d '\r')
+    build_id=$(run_adb shell getprop ro.build.display.id | tr -d '\r')
+    build_type=$(run_adb shell getprop ro.build.type | tr -d '\r')
+    abi_list=$(run_adb shell getprop ro.product.cpu.abilist | tr -d '\r')
+    serial=$(run_adb shell getprop ro.serialno | tr -d '\r')
+
+    battery_line=$(run_adb shell dumpsys battery | tr -d '\r')
+    battery_level=$(printf '%s\n' "$battery_line" | sed -n 's/.*level: \([0-9]\+\).*/\1/p' | head -1)
+    battery_status=$(printf '%s\n' "$battery_line" | sed -n 's/.*status: \([0-9]\+\).*/\1/p' | head -1)
+
+    mem_total=$(run_adb shell "awk '/MemTotal/ {print \$2 \" kB\"}' /proc/meminfo" | tr -d '\r')
+    mem_available=$(run_adb shell "awk '/MemAvailable/ {print \$2 \" kB\"}' /proc/meminfo" | tr -d '\r')
+    storage_line=$(run_adb shell df -h /data 2>/dev/null | tail -1 | tr -d '\r')
+    uptime_seconds=$(run_adb shell cut -d. -f1 /proc/uptime | tr -d '\r')
+    ip_address=$(run_adb shell "ip -4 addr show wlan0 2>/dev/null | awk '/inet / {print \$2}' | cut -d/ -f1" | tr -d '\r')
+
+    if [ -n "$uptime_seconds" ] && [[ "$uptime_seconds" =~ ^[0-9]+$ ]]; then
+        uptime_human="$((uptime_seconds / 86400))d $(((uptime_seconds % 86400) / 3600))h $(((uptime_seconds % 3600) / 60))m"
+    else
+        uptime_human="Unknown"
+    fi
+
+    case "$battery_status" in
+        2) battery_status="Charging";;
+        3) battery_status="Discharging";;
+        4) battery_status="Not charging";;
+        5) battery_status="Full";;
+        *) battery_status="Unknown";;
+    esac
+
+    [ -z "$ip_address" ] && ip_address="Unavailable"
+
+    echo -e "${BOLD}Full Device Information:${RESET}"
+    echo -e "Device ID: ${GREEN}$SELECTED_DEVICE${RESET}"
+    echo -e "Serial: ${GREEN}$serial${RESET}"
+    echo -e "Manufacturer: ${GREEN}$manufacturer${RESET}"
+    echo -e "Brand: ${GREEN}$brand${RESET}"
+    echo -e "Model: ${GREEN}$device_name${RESET}"
+    echo -e "Android Version: ${GREEN}$android_version${RESET}"
+    echo -e "SDK Version: ${GREEN}$sdk_version${RESET}"
+    echo -e "Security Patch: ${GREEN}$security_patch${RESET}"
+    echo -e "Build ID: ${GREEN}$build_id${RESET}"
+    echo -e "Build Type: ${GREEN}$build_type${RESET}"
+    echo -e "CPU ABIs: ${GREEN}$abi_list${RESET}"
+    echo -e "Screen Resolution: ${GREEN}$(run_adb shell wm size | tr -d '\r')${RESET}"
+    echo -e "Battery Level: ${GREEN}${battery_level:-Unknown}%${RESET}"
+    echo -e "Battery Status: ${GREEN}$battery_status${RESET}"
+    echo -e "Memory Total: ${GREEN}${mem_total:-Unknown}${RESET}"
+    echo -e "Memory Available: ${GREEN}${mem_available:-Unknown}${RESET}"
+    echo -e "Storage (/data): ${GREEN}${storage_line:-Unavailable}${RESET}"
+    echo -e "Uptime: ${GREEN}$uptime_human${RESET}"
+    echo -e "Wi-Fi IP: ${GREEN}$ip_address${RESET}"
 }
 
 get_rotation_settings() {
@@ -631,7 +697,7 @@ show_menu() {
     echo -e "${BOLD}╚═════════════════════════════════════════════════╝${RESET}"
     echo
     echo -e "${BOLD}SELECTED DEVICE:${RESET} ${GREEN}$SELECTED_DEVICE${RESET} ($(get_selected_device_model))"
-    echo -e "${YELLOW}c. Change device${RESET}     ${RED}r. Reboot device${RESET}     ${BLUE}b. Backup${RESET}    ${GREEN}s. Restore${RESET}    ${RED}0. Exit${RESET}"
+    echo -e "${YELLOW}c. Change device${RESET}     ${CYAN}i. Full device info${RESET}     ${RED}r. Reboot device${RESET}     ${BLUE}b. Backup${RESET}    ${GREEN}s. Restore${RESET}    ${RED}0. Exit${RESET}"
     echo
     echo -e "${BOLD}--- INFORMATION ---${RESET}"
     echo -e "  1. Show animation settings      4. Show HW acceleration status"
@@ -712,6 +778,7 @@ while true; do
             wait_for_enter
             ;;
         c|C) change_device;;
+        i|I) run_menu_action get_full_device_info; wait_for_enter;;
         r|R) run_menu_action reboot_device; wait_for_enter;;
         b|B) run_menu_action backup_settings; wait_for_enter;;
         s|S) run_menu_action restore_settings; wait_for_enter;;
